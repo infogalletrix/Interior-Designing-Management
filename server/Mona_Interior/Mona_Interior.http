@@ -1,0 +1,6 @@
+@Mona_Interior_HostAddress = http://localhost:5255
+
+GET {{Mona_Interior_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

@@ -21,6 +21,7 @@ import ReportsPage from "./pages/ReportsPage";
 import ReceiptPage from "./pages/ReceiptPage";
 import { DialogProvider } from "./contexts/DialogContext";
 import { ThemeProvider } from "./contexts/ThemeContext";
+import NotificationWidget from "./components/NotificationWidget";
 
 function App() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
@@ -29,35 +30,38 @@ function App() {
     <ThemeProvider>
       <DialogProvider>
         <Router>
-          <div className="flex h-screen bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white overflow-hidden transition-colors duration-300">
+          <div className="flex h-screen bg-[#F4F5F7] dark:bg-slate-950 text-[#1C2B4B] dark:text-white overflow-hidden transition-colors duration-300">
             <Sidebar
               isOpen={isSidebarOpen}
               toggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)}
             />
-            <main className="flex-1 overflow-y-auto">
-              <Routes>
-                <Route path="/" element={<Dashboard />} />
-                <Route path="/crm" element={<CRMPage />} />
-                <Route path="/quotations" element={<QuotationPage />} />
+            <main className="flex-1 overflow-y-auto relative flex flex-col items-center">
+              <NotificationWidget />
+              <div className="w-full max-w-[1600px] 2xl:max-w-[1920px] mx-auto">
+                <Routes>
+                  <Route path="/" element={<Dashboard />} />
+                  <Route path="/crm" element={<CRMPage />} />
+                  <Route path="/quotations" element={<QuotationPage />} />
 
-                {/* Finance */}
-                <Route path="/billing" element={<BillingPage />} />
-                <Route path="/invoices" element={<InvoicesPage />} />
-                <Route path="/expenses" element={<ExpensePage />} />
-                <Route path="/accounts" element={<AccountsPage />} />
-                <Route path="/receipts" element={<ReceiptPage />} />
+                  {/* Finance */}
+                  <Route path="/billing" element={<BillingPage />} />
+                  <Route path="/invoices" element={<InvoicesPage />} />
+                  <Route path="/expenses" element={<ExpensePage />} />
+                  <Route path="/accounts" element={<AccountsPage />} />
+                  <Route path="/receipts" element={<ReceiptPage />} />
 
-                {/* Projects */}
-                <Route path="/sites" element={<SitesPage />} />
+                  {/* Projects */}
+                  <Route path="/sites" element={<SitesPage />} />
 
-                {/* HR */}
-                <Route path="/employees" element={<EmployeesPage />} />
-                <Route path="/attendance" element={<AttendancePage />} />
-                <Route path="/salary" element={<SalaryPage />} />
-                <Route path="/reports" element={<ReportsPage />} />
+                  {/* HR */}
+                  <Route path="/employees" element={<EmployeesPage />} />
+                  <Route path="/attendance" element={<AttendancePage />} />
+                  <Route path="/salary" element={<SalaryPage />} />
+                  <Route path="/reports" element={<ReportsPage />} />
 
-                <Route path="*" element={<Navigate to="/" replace />} />
-              </Routes>
+                  <Route path="*" element={<Navigate to="/" replace />} />
+                </Routes>
+              </div>
             </main>
           </div>
         </Router>

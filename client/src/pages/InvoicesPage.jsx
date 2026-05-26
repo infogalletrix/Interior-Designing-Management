@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useReactToPrint } from "react-to-print";
 import PrintableInvoice from "../components/PrintableInvoice";
+import PrintableQuotation from "../components/PrintableQuotation";
 import {
   FileText, Search, Eye, Printer, CheckCircle2, Clock, AlertCircle,
   IndianRupee, TrendingUp, Calendar, X, Filter, Edit2, Trash2,
@@ -132,10 +133,10 @@ export default function HistoryPage() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5">
         <div>
-          <h1 className="text-xl font-black text-white flex items-center gap-2">
-            <History className="text-blue-600" size={18} /> Transaction History
+          <h1 className="text-xl font-black text-themed flex items-center gap-2">
+            <History className="text-[#C9A227]" size={18} /> Transaction History
           </h1>
-          <p className="text-slate-500 text-xs mt-0.5 font-medium">All invoices and quotations in one place.</p>
+          <p className="text-muted text-xs mt-0.5 font-medium">All invoices and quotations in one place.</p>
         </div>
         {/* Tab Buttons */}
         <div className="flex gap-2">
@@ -143,7 +144,7 @@ export default function HistoryPage() {
             onClick={() => { setActiveTab("invoices"); setSearchTerm(""); }}
             className={`flex items-center gap-2 px-5 py-2.5 rounded-xl font-black text-sm transition-all shadow-sm ${
               activeTab === "invoices"
-                ? "bg-blue-600 text-white shadow-blue-200 shadow-md"
+                ? "bg-[#C9A227] text-white shadow-md"
                 : "bg-white/5 text-muted border border-[var(--border-color)] hover:bg-white/10"
             }`}
           >
@@ -165,7 +166,7 @@ export default function HistoryPage() {
       {/* ── INVOICES TAB ── */}
       {activeTab === "invoices" && (
         <>
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 mb-8">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 mb-8">
             <div className="themed-card p-7 rounded-3xl shadow-xl">
               <p className="text-muted text-[10px] font-black uppercase tracking-widest mb-2 flex items-center gap-2">
                 <IndianRupee size={12} /> Total Invoiced
@@ -179,13 +180,6 @@ export default function HistoryPage() {
                 <h2 className="text-3xl font-black text-emerald-600">₹{totalCollected.toLocaleString()}</h2>
               </div>
               <div className="p-4 bg-emerald-500/10 rounded-3xl text-emerald-500"><TrendingUp size={28} /></div>
-            </div>
-            <div className="themed-card p-7 rounded-3xl flex items-center justify-between">
-              <div>
-                <p className="text-[10px] font-black text-muted uppercase tracking-widest mb-1">Outstanding Balance</p>
-                <h2 className="text-3xl font-black text-red-500">₹{totalOutstanding.toLocaleString()}</h2>
-              </div>
-              <div className="p-4 bg-red-500/10 rounded-3xl text-red-500"><AlertCircle size={28} /></div>
             </div>
           </div>
 
@@ -211,7 +205,6 @@ export default function HistoryPage() {
                     <th className="px-8 py-4">Client</th>
                     <th className="px-8 py-4 text-right">Grand Total</th>
                     <th className="px-8 py-4 text-right">Collected</th>
-                    <th className="px-8 py-4 text-right">Balance</th>
                     <th className="px-8 py-4 text-center">Actions</th>
                   </tr>
                 </thead>
@@ -230,11 +223,10 @@ export default function HistoryPage() {
                         </td>
                         <td className="px-8 py-5 text-right font-black text-themed text-base">₹{parseFloat(inv.grandTotal).toLocaleString()}</td>
                         <td className="px-8 py-5 text-right font-bold text-emerald-600">₹{collected.toLocaleString()}</td>
-                        <td className="px-8 py-5 text-right font-bold text-red-500">₹{Math.max(0, parseFloat(inv.balanceAmount || 0)).toLocaleString()}</td>
                         <td className="px-8 py-5">
                           <div className="flex items-center justify-center gap-2">
                             <button onClick={() => navigate("/billing", { state: { editInvoice: inv } })} className="p-2 bg-violet-500/10 text-violet-500 rounded-xl hover:bg-violet-500/20 transition" title="Edit"><Edit2 size={16} /></button>
-                            <button onClick={() => setPreviewInvoice(inv)} className="p-2 bg-blue-500/10 text-blue-500 rounded-xl hover:bg-blue-500/20 transition" title="Preview"><Eye size={16} /></button>
+                            <button onClick={() => setPreviewInvoice(inv)} className="p-2 bg-[var(--accent)]/10 text-[var(--accent)] rounded-xl hover:bg-[var(--accent)]/20 transition" title="Preview"><Eye size={16} /></button>
                             <button onClick={() => { setPreviewInvoice(inv); setTimeout(() => handlePrint(), 400); }} className="p-2 bg-teal-500/10 text-teal-500 rounded-xl hover:bg-teal-500/20 transition" title="Print"><Printer size={16} /></button>
                             <button onClick={() => deleteInvoice(inv.id)} className="p-2 bg-rose-500/10 text-rose-500 rounded-xl hover:bg-rose-500/20 transition" title="Delete"><Trash2 size={16} /></button>
                           </div>
@@ -334,7 +326,9 @@ export default function HistoryPage() {
                         </td>
                         <td className="px-8 py-5">
                           <div className="flex items-center justify-center gap-2">
-                            <button onClick={() => navigate("/quotation", { state: { editQuote: q } })} className="p-2 bg-violet-500/10 text-violet-500 rounded-xl hover:bg-violet-500/20 transition" title="Edit"><Edit2 size={16} /></button>
+                            <button onClick={() => navigate("/quotations", { state: { editQuote: q } })} className="p-2 bg-violet-500/10 text-violet-500 rounded-xl hover:bg-violet-500/20 transition" title="Edit"><Edit2 size={16} /></button>
+                            <button onClick={() => setPreviewInvoice(q)} className="p-2 bg-blue-500/10 text-blue-500 rounded-xl hover:bg-blue-500/20 transition" title="Preview"><Eye size={16} /></button>
+                            <button onClick={() => { setPreviewInvoice(q); setTimeout(() => handlePrint(), 400); }} className="p-2 bg-teal-500/10 text-teal-500 rounded-xl hover:bg-teal-500/20 transition" title="Print"><Printer size={16} /></button>
                             <button onClick={() => deleteQuotation(q.id)} className="p-2 bg-rose-500/10 text-rose-500 rounded-xl hover:bg-rose-500/20 transition" title="Delete"><Trash2 size={16} /></button>
                           </div>
                         </td>
@@ -357,12 +351,31 @@ export default function HistoryPage() {
       )}
 
       {/* Preview Modal */}
-      {previewInvoice && (
+      {previewInvoice && (() => {
+        const isQuote = !!previewInvoice.quoteNo;
+        const docTypeName = isQuote ? "Quotation" : "Invoice";
+        const docNo = isQuote ? previewInvoice.quoteNo : previewInvoice.invoiceNo;
+        const docDate = isQuote ? previewInvoice.date : previewInvoice.invoiceDate;
+
+        let quoteSubTotal = 0;
+        let quoteGst = 0;
+        let quoteTotal = 0;
+        if (isQuote) {
+          quoteSubTotal = (previewInvoice.items || []).reduce((sum, i) => sum + (parseFloat(i.amount) || 0), 0);
+          quoteGst = previewInvoice.billType === "Non-GST" ? 0 : quoteSubTotal * 0.18;
+          quoteTotal = quoteSubTotal + quoteGst;
+        }
+
+        const displaySubTotal = isQuote ? quoteSubTotal : parseFloat(previewInvoice.subTotal || 0);
+        const displayGst = isQuote ? quoteGst : parseFloat(previewInvoice.totalGst || 0);
+        const displayTotal = isQuote ? quoteTotal : parseFloat(previewInvoice.grandTotal || previewInvoice.total || 0);
+
+        return (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-6 z-50">
           <div className="themed-modal rounded-[32px] w-full max-w-2xl shadow-2xl overflow-hidden">
             <div className="bg-slate-900 p-6 text-white flex justify-between items-center">
               <div>
-                <h3 className="font-black text-lg">{previewInvoice.invoiceNo}</h3>
+                <h3 className="font-black text-lg">{docNo}</h3>
                 <p className="text-slate-400 text-sm flex items-center gap-2">
                   <span>{previewInvoice.billType === "GST" ? (previewInvoice.organizationName || "GST Invoice") : previewInvoice.clientName}</span>
                   {previewInvoice.workOrderId && (
@@ -394,8 +407,8 @@ export default function HistoryPage() {
                     <p className="text-slate-500 text-xs mt-1">{previewInvoice.clientAddress}</p>
                   </div>
                   <div className="text-right">
-                    <p className="text-slate-400 text-xs font-black uppercase tracking-widest">Invoice Date</p>
-                    <p className="font-bold text-themed mt-1">{previewInvoice.invoiceDate}</p>
+                    <p className="text-slate-400 text-xs font-black uppercase tracking-widest">{docTypeName} Date</p>
+                    <p className="font-bold text-themed mt-1">{docDate}</p>
                   </div>
                 </div>
                 <table className="w-full text-sm border border-slate-100 rounded-2xl overflow-hidden mt-4">
@@ -403,54 +416,74 @@ export default function HistoryPage() {
                     <tr className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
                       <th className="px-4 py-3 text-left">Work</th>
                       <th className="px-4 py-3 text-center">Area</th>
-                      <th className="px-4 py-3 text-right">Taxable</th>
-                      {parseFloat(previewInvoice.totalGst || 0) > 0 && <th className="px-4 py-3 text-right">GST</th>}
+                      <th className="px-4 py-3 text-right">{isQuote ? "Rate" : "Taxable"}</th>
+                      {!isQuote && parseFloat(previewInvoice.totalGst || 0) > 0 && <th className="px-4 py-3 text-right">GST</th>}
                       <th className="px-4 py-3 text-right">Total</th>
                     </tr>
                   </thead>
                   <tbody>
                     {previewInvoice.items?.map((item, i) => (
                       <tr key={i} className="border-t border-slate-100">
-                        <td className="px-4 py-3 font-medium">{item.work}</td>
+                        <td className="px-4 py-3 font-medium">{isQuote ? item.description : item.work}</td>
                         <td className="px-4 py-3 text-center">{item.area} {item.unit}</td>
-                        <td className="px-4 py-3 text-right">₹{parseFloat(item.taxableAmount || 0).toLocaleString()}</td>
-                        {parseFloat(previewInvoice.totalGst || 0) > 0 && <td className="px-4 py-3 text-right text-blue-600">₹{parseFloat(item.gstAmount || 0).toLocaleString()}</td>}
+                        <td className="px-4 py-3 text-right">₹{parseFloat(isQuote ? item.rate : (item.taxableAmount || 0)).toLocaleString()}</td>
+                        {!isQuote && parseFloat(previewInvoice.totalGst || 0) > 0 && <td className="px-4 py-3 text-right text-blue-600">₹{parseFloat(item.gstAmount || 0).toLocaleString()}</td>}
                         <td className="px-4 py-3 text-right font-black">₹{parseFloat(item.amount || 0).toLocaleString()}</td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
                 <div className="border-t border-slate-200 pt-4 space-y-2">
-                  <div className="flex justify-between text-sm"><span className="text-slate-500">Subtotal</span><span className="font-bold">₹{parseFloat(previewInvoice.subTotal || 0).toLocaleString()}</span></div>
-                  {parseFloat(previewInvoice.totalGst || 0) > 0 && <div className="flex justify-between text-sm"><span className="text-slate-500">Total GST</span><span className="font-bold text-blue-600">₹{parseFloat(previewInvoice.totalGst || 0).toLocaleString()}</span></div>}
-                  <div className="flex justify-between text-lg font-black border-t border-slate-200 pt-2 mt-2"><span>Grand Total</span><span className="text-emerald-600">₹{parseFloat(previewInvoice.grandTotal || 0).toLocaleString()}</span></div>
-                  <div className="flex justify-between text-sm"><span className="text-slate-500">Advance Paid</span><span className="font-bold">₹{parseFloat(previewInvoice.advanceAmount || 0).toLocaleString()}</span></div>
-                  <div className="flex justify-between text-sm"><span className="text-slate-500">Received</span><span className="font-bold">₹{parseFloat(previewInvoice.receivedAmount || 0).toLocaleString()}</span></div>
-                  <div className="flex justify-between text-base font-black text-red-600 border-t border-slate-200 pt-2"><span>Balance Due</span><span>₹{Math.max(0, parseFloat(previewInvoice.balanceAmount || 0)).toLocaleString()}</span></div>
+                  <div className="flex justify-between text-sm"><span className="text-slate-500">Subtotal</span><span className="font-bold">₹{displaySubTotal.toLocaleString()}</span></div>
+                  {displayGst > 0 && <div className="flex justify-between text-sm"><span className="text-slate-500">Total GST</span><span className="font-bold text-blue-600">₹{displayGst.toLocaleString()}</span></div>}
+                  <div className="flex justify-between text-lg font-black border-t border-slate-200 pt-2 mt-2"><span>Grand Total</span><span className="text-emerald-600">₹{displayTotal.toLocaleString()}</span></div>
+                  {!isQuote && (
+                    <>
+                      <div className="flex justify-between text-sm"><span className="text-slate-500">Advance Paid</span><span className="font-bold">₹{parseFloat(previewInvoice.advanceAmount || 0).toLocaleString()}</span></div>
+                      <div className="flex justify-between text-sm"><span className="text-slate-500">Received</span><span className="font-bold">₹{parseFloat(previewInvoice.receivedAmount || 0).toLocaleString()}</span></div>
+                      <div className="flex justify-between text-base font-black text-red-600 border-t border-slate-200 pt-2"><span>Balance Due</span><span>₹{Math.max(0, parseFloat(previewInvoice.balanceAmount || 0)).toLocaleString()}</span></div>
+                    </>
+                  )}
                 </div>
               </div>
             </div>
           </div>
         </div>
-      )}
+        );
+      })()}
 
-      {previewInvoice && (
+      {previewInvoice && (() => {
+        const isQuote = !!previewInvoice.quoteNo;
+        const docTypeName = isQuote ? "Quotation" : "Invoice";
+        const docNo = isQuote ? previewInvoice.quoteNo : previewInvoice.invoiceNo;
+        const docDate = isQuote ? previewInvoice.date : previewInvoice.invoiceDate;
+
+        return (
         <div className="opacity-0 fixed top-0 left-0 pointer-events-none">
-          <PrintableInvoice ref={componentRef} data={{
-            customer: previewInvoice.clientName, address: previewInvoice.clientAddress,
-            items: previewInvoice.items || [], invoiceNo: previewInvoice.invoiceNo,
-            invoiceDate: previewInvoice.invoiceDate, discount: previewInvoice.discount,
-            lessAmount: previewInvoice.lessAmount, advanceAmount: previewInvoice.advanceAmount,
-            receivedAmount: previewInvoice.receivedAmount, subTotal: previewInvoice.subTotal,
-            totalGst: previewInvoice.totalGst, grandTotal: previewInvoice.grandTotal,
-            balanceAmount: previewInvoice.balanceAmount,
-            organizationName: previewInvoice.organizationName,
-            gstNumber: previewInvoice.gstNumber,
-            billType: previewInvoice.billType,
-            workOrderId: previewInvoice.workOrderId,
-          }} docType="Invoice" />
+          {isQuote ? (
+            <PrintableQuotation ref={componentRef} data={{
+              customer: previewInvoice.clientName, address: previewInvoice.clientAddress,
+              projectTitle: previewInvoice.projectTitle, workDescription: previewInvoice.workDescription,
+              items: previewInvoice.items || [], quoteNo: docNo, date: docDate, billType: previewInvoice.billType
+            }} />
+          ) : (
+            <PrintableInvoice ref={componentRef} data={{
+              customer: previewInvoice.clientName, address: previewInvoice.clientAddress,
+              items: previewInvoice.items || [], invoiceNo: docNo,
+              invoiceDate: docDate, discount: previewInvoice.discount,
+              lessAmount: previewInvoice.lessAmount, advanceAmount: previewInvoice.advanceAmount,
+              receivedAmount: previewInvoice.receivedAmount, subTotal: previewInvoice.subTotal,
+              totalGst: previewInvoice.totalGst, grandTotal: previewInvoice.grandTotal || previewInvoice.total,
+              balanceAmount: previewInvoice.balanceAmount,
+              organizationName: previewInvoice.organizationName,
+              gstNumber: previewInvoice.gstNumber,
+              billType: previewInvoice.billType,
+              workOrderId: previewInvoice.workOrderId,
+            }} docType={docTypeName} />
+          )}
         </div>
-      )}
+        );
+      })()}
     </div>
   );
 }

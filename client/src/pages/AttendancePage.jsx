@@ -48,7 +48,18 @@ export default function AttendancePage() {
 
       const attRes = await fetch('/api/attendance');
       const attData = await attRes.json();
-      setAttendanceData(attData);
+      
+      const lockedDays = JSON.parse(localStorage.getItem('attendanceLockedDays') || '{}');
+      const groupedData = {};
+      
+      attData.forEach(r => {
+        if (!groupedData[r.date]) {
+          groupedData[r.date] = { isLocked: lockedDays[r.date] || false, records: {} };
+        }
+        groupedData[r.date].records[r.employeeId] = { status: r.status, overtime: r.overtime || 0 };
+      });
+      
+      setAttendanceData(groupedData);
     } catch(err) {
       console.error(err);
     }
@@ -90,17 +101,24 @@ export default function AttendancePage() {
 
   // --- ACTIONS ---
   const saveAttendance = async (lock = false) => {
-    const payload = {
+    const payload = Object.keys(currentRecords).map(empId => ({
+      employeeId: parseInt(empId),
       date: selectedDate,
-      isLocked: lock,
-      records: currentRecords
-    };
+      status: currentRecords[empId].status,
+      overtime: currentRecords[empId].overtime || 0
+    }));
+
     try {
-      await fetch('/api/attendance', {
+      await fetch('/api/attendance/batch', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify(payload)
       });
+      
+      const lockedDays = JSON.parse(localStorage.getItem('attendanceLockedDays') || '{}');
+      lockedDays[selectedDate] = lock;
+      localStorage.setItem('attendanceLockedDays', JSON.stringify(lockedDays));
+
       const newData = { 
         ...attendanceData, 
         [selectedDate]: { isLocked: lock, records: currentRecords } 
@@ -112,17 +130,11 @@ export default function AttendancePage() {
   };
 
   const handleUnlock = async () => {
-    const payload = {
-      date: selectedDate,
-      isLocked: false,
-      records: currentRecords
-    };
     try {
-      await fetch('/api/attendance', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify(payload)
-      });
+      const lockedDays = JSON.parse(localStorage.getItem('attendanceLockedDays') || '{}');
+      lockedDays[selectedDate] = false;
+      localStorage.setItem('attendanceLockedDays', JSON.stringify(lockedDays));
+
       const newData = { 
         ...attendanceData, 
         [selectedDate]: { ...attendanceData[selectedDate], isLocked: false } 
@@ -216,7 +228,9 @@ export default function AttendancePage() {
   };
 
   // --- FILTERING ---
-  const filteredEmployees = employees.filter((emp) => {
+  const activeEmployees = employees.filter(e => e.status === "Active");
+
+  const filteredEmployees = activeEmployees.filter((emp) => {
     const matchesSearch =
       emp.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       emp.phone.includes(searchTerm);
@@ -233,9 +247,9 @@ export default function AttendancePage() {
   });
 
   // --- SUMMARY STATS ---
-  const presentCount = employees.filter(e => currentRecords[e.id]?.status === "present").length;
-  const halfDayCount = employees.filter(e => currentRecords[e.id]?.status === "half-day").length;
-  const absentCount = employees.length - presentCount - halfDayCount;
+  const presentCount = activeEmployees.filter(e => currentRecords[e.id]?.status === "present").length;
+  const halfDayCount = activeEmployees.filter(e => currentRecords[e.id]?.status === "half-day").length;
+  const absentCount = activeEmployees.length - presentCount - halfDayCount;
 
   // --- EXPORT LOGIC ---
   const generateExportData = () => {
@@ -344,7 +358,7 @@ export default function AttendancePage() {
       <div className="flex flex-col md:flex-row justify-between items-center mb-3 gap-2">
         <div>
           <h1 className="text-xl font-black text-themed tracking-tight flex items-center gap-2">
-            <Users className="text-indigo-500" size={18} />
+            <Users className="text-[#C9A227]" size={18} />
             Attendance Management
           </h1>
           <p className="text-muted font-medium text-xs mt-0.5">
@@ -381,7 +395,7 @@ export default function AttendancePage() {
             onClick={() => setActiveTab(tab.id)}
             className={`flex items-center gap-1.5 px-4 py-2 rounded-t-xl text-sm font-bold transition-all ${
               activeTab === tab.id
-                ? "bg-[var(--bg-card)] text-indigo-500 border-t-2 border-l border-r border-[var(--border-color)] shadow-sm translate-y-[1px]"
+                ? "bg-[var(--bg-card)] text-[#C9A227] border-t-2 border-l border-r border-[var(--border-color)] shadow-sm translate-y-[1px]"
                 : "text-muted hover:text-themed hover:bg-white/5"
             }`}
           >
@@ -401,14 +415,14 @@ export default function AttendancePage() {
                 Selected Date
               </div>
               <div className="relative flex items-center gap-2">
-                <CalendarDays className="text-indigo-500" size={20} />
+                <CalendarDays className="text-[#C9A227]" size={20} />
                 <input
                   type="date"
                   value={selectedDate}
                   max={activeTab === "history" ? today : undefined}
                   readOnly={activeTab === "daily"}
                   onChange={(e) => setSelectedDate(e.target.value)}
-                  className={`w-full text-lg font-black bg-transparent outline-none ${activeTab === "history" ? "cursor-pointer focus:text-indigo-600" : "text-slate-400 cursor-not-allowed"}`}
+                  className={`w-full text-lg font-black bg-transparent outline-none ${activeTab === "history" ? "cursor-pointer focus:text-[#C9A227]" : "text-slate-400 cursor-not-allowed"}`}
                 />
               </div>
             </div>
@@ -422,7 +436,7 @@ export default function AttendancePage() {
               <button
                 onClick={markAllPresent}
                 disabled={isLocked}
-                className="text-xs font-bold text-indigo-500 hover:underline disabled:opacity-50 disabled:hover:no-underline px-2"
+                className="text-xs font-bold text-[#C9A227] hover:underline disabled:opacity-50 disabled:hover:no-underline px-2"
               >
                 Mark All Present
               </button>
@@ -444,13 +458,13 @@ export default function AttendancePage() {
                 <>
                   <button
                     onClick={() => saveAttendance(false)}
-                    className="bg-indigo-500/20 text-indigo-400 px-4 py-2 text-sm rounded-xl font-bold flex items-center gap-1.5 transition hover:bg-indigo-500/30"
+                    className="bg-[#C9A227]/10 text-[#C9A227] px-4 py-2 text-sm rounded-xl font-bold flex items-center gap-1.5 transition hover:bg-[#C9A227]/20"
                   >
                     <Save size={16} /> Save Draft
                   </button>
                   <button
                     onClick={() => saveAttendance(true)}
-                    className="bg-indigo-600 text-white px-4 py-2 text-sm rounded-xl font-bold shadow-md flex items-center gap-1.5 transition hover:bg-indigo-700"
+                    className="bg-[#C9A227] text-white px-4 py-2 text-sm rounded-xl font-bold shadow-md flex items-center gap-1.5 transition hover:bg-[#B8911F]"
                   >
                     <Lock size={16} /> Save & Lock
                   </button>
@@ -463,7 +477,7 @@ export default function AttendancePage() {
 
       {activeTab === "weekly" && (
         <div className="themed-card p-4 rounded-2xl shadow-sm mb-4 flex items-center gap-3 max-w-sm">
-          <Calendar className="text-indigo-500" size={20} />
+          <Calendar className="text-[#C9A227]" size={20} />
           <div className="flex-1">
             <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">
               Select Week (Starts Monday)
@@ -472,7 +486,7 @@ export default function AttendancePage() {
               type="date"
               value={selectedWeekStart}
               onChange={(e) => setSelectedWeekStart(e.target.value)}
-              className="w-full text-base font-black bg-transparent outline-none cursor-pointer focus:text-indigo-600"
+              className="w-full text-base font-black bg-transparent outline-none cursor-pointer focus:text-[#C9A227]"
             />
           </div>
         </div>
@@ -480,7 +494,7 @@ export default function AttendancePage() {
 
       {activeTab === "monthly" && (
         <div className="themed-card p-4 rounded-2xl shadow-sm mb-4 flex items-center gap-3 max-w-sm">
-          <BarChart3 className="text-indigo-500" size={20} />
+          <BarChart3 className="text-[#C9A227]" size={20} />
           <div className="flex-1">
             <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">
               Select Month
@@ -489,7 +503,7 @@ export default function AttendancePage() {
               type="month"
               value={selectedMonth}
               onChange={(e) => setSelectedMonth(e.target.value)}
-              className="w-full text-base font-black bg-transparent outline-none cursor-pointer focus:text-indigo-600"
+              className="w-full text-base font-black bg-transparent outline-none cursor-pointer focus:text-[#C9A227]"
             />
           </div>
         </div>
@@ -597,15 +611,16 @@ export default function AttendancePage() {
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-1.5 max-w-[100px]">
                           <input 
-                            type="number"
+                            type="text"
+                            inputMode="decimal" pattern="^\d*\.?\d*$"
                             min="0"
                             max="24"
                             step="0.5"
                             value={record.overtime || ""}
-                            onChange={(e) => handleOvertimeChange(emp.id, e.target.value)}
+                            onChange={(e) => handleOvertimeChange(emp.id, e.target.value.replace(/[^0-9.]/g, '').replace(/(\..*?)\..*/g, '$1'))}
                             disabled={isLocked}
                             placeholder="0"
-                            className="w-full p-1.5 border border-[var(--border-color)] rounded-lg themed-input font-bold text-xs outline-none focus:border-indigo-500 transition-colors disabled:opacity-50"
+                            className="w-full p-1.5 border border-[var(--border-color)] rounded-lg themed-input font-bold text-xs outline-none focus:border-[#C9A227] transition-colors disabled:opacity-50"
                           />
                           <span className="text-[10px] font-bold text-slate-400">hrs</span>
                         </div>
@@ -632,7 +647,7 @@ export default function AttendancePage() {
                       </div>
                     </td>
                     <td className="px-4 py-3 text-center">
-                      <div className="inline-flex items-center justify-center w-10 h-10 rounded-full bg-indigo-500/10 text-indigo-400 font-black text-base border border-indigo-500/20">
+                      <div className="inline-flex items-center justify-center w-10 h-10 rounded-full bg-amber-500/10 text-amber-500 font-black text-base border border-amber-500/20">
                         {emp.totalOT}
                       </div>
                     </td>
@@ -660,7 +675,7 @@ export default function AttendancePage() {
                       </div>
                     </td>
                     <td className="px-4 py-3 text-center">
-                      <div className="inline-flex items-center justify-center min-w-[3.5rem] px-3 h-10 rounded-xl bg-indigo-500/10 text-indigo-400 font-black text-base border border-indigo-500/20">
+                      <div className="inline-flex items-center justify-center min-w-[3.5rem] px-3 h-10 rounded-xl bg-amber-500/10 text-amber-500 font-black text-base border border-amber-500/20">
                         {emp.totalOT} hrs
                       </div>
                     </td>

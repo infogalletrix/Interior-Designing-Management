@@ -33,12 +33,17 @@ export default function QuotationPage() {
   const [quoteNo, setQuoteNo] = useState("");
   const [quoteDate] = useState(new Date().toLocaleDateString("en-GB"));
 
-  const [newItem, setNewItem] = useState({
-    description: "",
-    unit: "Sq.Ft",
-    area: "",
-    rate: "",
-  });
+
+
+  const [crmClients, setCrmClients] = useState([]);
+
+  // Fetch CRM clients on mount
+  useEffect(() => {
+    fetch('/api/crm')
+      .then(res => res.json())
+      .then(data => setCrmClients(data))
+      .catch(err => console.error("Failed to load CRM clients", err));
+  }, []);
 
   // ── MULTI-SESSION LOGIC ──────────────────────────────────────
   const [sessions, setSessions] = useState(() => {
@@ -65,7 +70,7 @@ export default function QuotationPage() {
       if (d.quoteNo) setQuoteNo(d.quoteNo);
     } else {
       // Clear for a new session if no data
-      setItems([]);
+      setItems([{ id: Date.now(), description: "", unit: "Sq.Ft", area: "", rate: "", amount: 0 }]);
       setClientName("");
       setOrganizationName("");
       setClientAddress("");
@@ -134,24 +139,97 @@ export default function QuotationPage() {
       navigate(location.pathname, { replace: true, state: {} });
       return;
     }
+    if (location.state?.editQuote) {
+      const q = location.state.editQuote;
+      const newId = `session-${Date.now()}`;
+      const newSession = {
+        id: newId,
+        title: q.clientName || 'Edit Quote',
+        data: {
+          items: q.items || [],
+          clientName: q.clientName || "",
+          organizationName: q.organizationName || "",
+          clientAddress: q.clientAddress || "",
+          projectTitle: q.projectTitle || "",
+          workDescription: q.workDescription || "",
+          billType: q.billType || "GST",
+          quoteNo: q.quoteNo || "",
+          quoteId: q.id || null
+        }
+      };
+      setSessions(prev => [...prev, newSession]);
+      setActiveSessionId(newId);
+      navigate(location.pathname, { replace: true, state: {} });
+    }
   }, []);
 
-  const addItem = (e) => {
-    if (e && e.preventDefault) e.preventDefault();
-    if (!newItem.description || !newItem.rate) return;
-    const amount =
-      parseFloat(newItem.area || 1) * parseFloat(newItem.rate || 0);
-    setItems([...items, { ...newItem, amount, id: Date.now() }]);
-    setNewItem({ description: "", unit: "Sq.Ft", area: "", rate: "" });
-    setTimeout(() => descRef.current?.focus(), 0);
+  const handleItemChange = (id, field, value) => {
+    setItems((prevItems) => {
+      return prevItems.map((item) => {
+        if (item.id === id) {
+          const updatedItem = { ...item, [field]: value };
+          const area = parseFloat(updatedItem.area || 0);
+          const rate = parseFloat(updatedItem.rate || 0);
+          const amount = area * rate;
+          return { ...updatedItem, amount };
+        }
+        return item;
+      });
+    });
+  };
+
+  const handleKeyDown = (e, idx, field) => {
+    const fields = ["description", "area", "rate"];
+
+    if (e.key === "Enter") {
+      e.preventDefault();
+      if (idx === items.length - 1) {
+        addNewRow();
+      }
+    } else if (e.key === "ArrowDown") {
+      e.preventDefault();
+      const nextInput = document.getElementById(`input-${idx + 1}-${field}`);
+      if (nextInput) nextInput.focus();
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      const prevInput = document.getElementById(`input-${idx - 1}-${field}`);
+      if (prevInput) prevInput.focus();
+    } else if (e.key === "ArrowRight") {
+      if (e.target.selectionStart === e.target.value.length) {
+        e.preventDefault();
+        const fieldIdx = fields.indexOf(field);
+        if (fieldIdx < fields.length - 1) {
+          const nextInput = document.getElementById(`input-${idx}-${fields[fieldIdx + 1]}`);
+          if (nextInput) nextInput.focus();
+        }
+      }
+    } else if (e.key === "ArrowLeft") {
+      if (e.target.selectionEnd === 0) {
+        e.preventDefault();
+        const fieldIdx = fields.indexOf(field);
+        if (fieldIdx > 0) {
+          const prevInput = document.getElementById(`input-${idx}-${fields[fieldIdx - 1]}`);
+          if (prevInput) prevInput.focus();
+        }
+      }
+    }
+  };
+
+  const addNewRow = () => {
+    setItems((prev) => [
+      ...prev,
+      {
+        id: Date.now() + Math.random(),
+        description: "",
+        unit: "Sq.Ft",
+        area: "",
+        rate: "",
+        amount: 0,
+      },
+    ]);
   };
 
   const removeItem = (id) => setItems(items.filter((i) => i.id !== id));
-
-  const editItem = (item) => {
-    setNewItem(item);
-    removeItem(item.id);
-  };
 
   const subTotal = items.reduce((s, i) => s + i.amount, 0);
   const totalArea = items.reduce(
@@ -206,6 +284,22 @@ export default function QuotationPage() {
         ));
       }
       showDialog({ title: "Success", message: "Quotation Saved Successfully!", type: "success" });
+      setTimeout(() => {
+        if (!quoteId) {
+          // Reset the form for the next quotation
+          setItems([{ id: Date.now(), description: "", unit: "Sq.Ft", area: "", rate: "", amount: 0 }]);
+          setClientName("");
+          setOrganizationName("");
+          setClientAddress("");
+          setProjectTitle("");
+          setWorkDescription("");
+          setQuoteId(null);
+          fetch("/api/quotations/next-number")
+            .then(res => res.json())
+            .then(data => { if (data && data.nextNumber) setQuoteNo(data.nextNumber); })
+            .catch(() => setQuoteNo(""));
+        }
+      }, 1500);
     } catch(err) { console.error(err); }
   };
 
@@ -232,17 +326,36 @@ export default function QuotationPage() {
     });
   };
 
+  const convertToWorkOrder = () => {
+    if (!clientName || items.length === 0) {
+      showDialog({ title: "Missing Information", message: "Add client name and at least one item before converting.", type: "alert" });
+      return;
+    }
+    
+    navigate("/sites", {
+      state: {
+        convertQuote: {
+          clientName,
+          organizationName,
+          clientAddress,
+          projectTitle,
+          workDescription,
+          totalAmount: subTotal,
+        },
+      },
+    });
+  };
+
   const clearForm = () => {
     showDialog({
       title: "Clear Form",
       message: "Clear all data?",
       type: "confirm",
       onConfirm: () => {
-        setItems([]);
+        setItems([{ id: Date.now(), description: "", unit: "Sq.Ft", area: "", rate: "", amount: 0 }]);
         setClientName("");
         setOrganizationName("");
         setClientAddress("");
-        setNewItem({ description: "", unit: "Sq.Ft", area: "", rate: "" });
       }
     });
   };
@@ -299,7 +412,7 @@ export default function QuotationPage() {
           <div className="flex bg-white/10 rounded p-0.5 gap-0.5">
             <button
               onClick={() => setBillType("GST")}
-              className={`flex-1 py-1 text-[10px] font-black uppercase rounded transition ${billType === "GST" ? "bg-blue-600 text-white" : "text-slate-500 hover:text-slate-700"}`}
+              className={`flex-1 py-1 text-[10px] font-black uppercase rounded transition ${billType === "GST" ? "bg-[#C9A227] text-white" : "text-slate-500 hover:text-slate-700"}`}
             >GST</button>
             <button
               onClick={() => setBillType("Non-GST")}
@@ -313,11 +426,26 @@ export default function QuotationPage() {
             Client Name
           </label>
           <input
+            list="crm-clients-list-quotation"
             placeholder="Enter client name..."
             value={clientName}
-            onChange={(e) => setClientName(e.target.value)}
+            onChange={(e) => {
+              const val = e.target.value;
+              setClientName(val);
+              const matchedClient = crmClients.find(c => c.name.toLowerCase() === val.toLowerCase());
+              if (matchedClient) {
+                if (!organizationName && matchedClient.organizationName) {
+                  setOrganizationName(matchedClient.organizationName);
+                }
+              }
+            }}
             className="w-full themed-input border border-[var(--border-color)] px-2 py-1 text-sm outline-none focus:border-amber-400"
           />
+          <datalist id="crm-clients-list-quotation">
+            {crmClients.map(c => (
+              <option key={c.id} value={c.name}>{c.organizationName ? `${c.organizationName}` : ""}</option>
+            ))}
+          </datalist>
         </div>
 
         <div className="col-span-3">
@@ -362,74 +490,6 @@ export default function QuotationPage() {
         </div>
       </div>
 
-      {/* ── ITEM ENTRY ROW ── */}
-      <div className="bg-[var(--bg-surface)] p-1 grid grid-cols-12 gap-1 border-b border-[var(--border-color)]">
-        <div className="col-span-4">
-          <label className="block text-[10px] font-bold text-amber-400 text-center uppercase">Work Description</label>
-          <input
-            ref={descRef}
-            placeholder="e.g. Living Room False Ceiling"
-            value={newItem.description}
-            onChange={(e) =>
-              setNewItem({ ...newItem, description: e.target.value })
-            }
-            onKeyPress={(e) => e.key === "Enter" && addItem()}
-            className="w-full themed-input border border-[var(--border-color)] px-2 py-1 text-sm outline-none focus:border-orange-400 font-medium"
-          />
-        </div>
-
-        <div className="col-span-1">
-          <label className="block text-[10px] font-bold text-amber-400 text-center uppercase">Unit</label>
-          <select
-            value={newItem.unit}
-            onChange={(e) => setNewItem({ ...newItem, unit: e.target.value })}
-            className="w-full themed-input border border-[var(--border-color)] px-2 py-1 text-sm outline-none focus:border-orange-400"
-          >
-            <option>Sq.Ft</option>
-            <option>L.Ft</option>
-            <option>Nos</option>
-            <option>LS</option>
-            <option>Rmt</option>
-          </select>
-        </div>
-
-        <div className="col-span-2">
-          <label className="block text-[10px] font-bold text-amber-400 text-center uppercase">Area / Qty</label>
-          <input
-            type="number"
-            placeholder="0"
-            value={newItem.area}
-            onChange={(e) => setNewItem({ ...newItem, area: e.target.value })}
-            className="w-full themed-input border border-[var(--border-color)] px-2 py-1 text-sm text-center outline-none focus:border-orange-400"
-          />
-        </div>
-
-        <div className="col-span-2">
-          <label className="block text-[10px] font-bold text-amber-400 text-center uppercase tracking-tighter">Rate / Unit (₹)</label>
-          <input
-            type="number"
-            placeholder="0.00"
-            value={newItem.rate}
-            onChange={(e) => setNewItem({ ...newItem, rate: e.target.value })}
-            onKeyPress={(e) => e.key === "Enter" && addItem()}
-            className="w-full themed-input border border-[var(--border-color)] px-2 py-1 text-sm text-right outline-none focus:border-orange-400 font-bold"
-          />
-        </div>
-
-        <div className="col-span-2">
-          <label className="block text-[10px] font-bold text-amber-400 text-center uppercase">Amount (₹)</label>
-          <div className="w-full bg-amber-500/10 border border-amber-500/20 px-2 py-1 text-sm text-right font-bold text-amber-400 h-[26px]">
-            {(
-              parseFloat(newItem.area || 1) * parseFloat(newItem.rate || 0)
-            ).toFixed(2)}
-          </div>
-        </div>
-        <div className="col-span-1 flex items-end">
-          <button onClick={addItem} type="button" className="w-full bg-orange-600 hover:bg-orange-700 text-white h-[26px] flex items-center justify-center rounded shadow-sm transition-all active:scale-95" title="Add Item to List">
-            <Plus size={16} strokeWidth={3} />
-          </button>
-        </div>
-      </div>
 
       {/* ── MAIN TABLE ── */}
       <div className="flex-grow bg-[var(--bg-surface)] overflow-y-auto">
@@ -463,35 +523,71 @@ export default function QuotationPage() {
                 <td className="px-2 py-1 border-r border-white/10 text-center">
                   <div className="flex justify-center gap-2">
                     <button
-                      onClick={() => editItem(item)}
-                      className="text-blue-400 hover:text-blue-600"
-                    >
-                      <Edit size={12} />
-                    </button>
-                    <button
                       onClick={() => removeItem(item.id)}
-                      className="text-red-400 hover:text-red-600"
+                      className="text-red-400 hover:text-red-600 p-1"
+                      title="Remove Row"
                     >
-                      <Trash2 size={12} />
+                      <Trash2 size={14} />
                     </button>
                   </div>
                 </td>
                 <td className="px-2 py-1 border-r border-white/10 text-center font-bold text-gray-400">
                   {idx + 1}
                 </td>
-                <td className="px-2 py-1 border-r border-white/10 uppercase font-medium">
-                  {item.description}
+                <td className="px-1 py-1 border-r border-white/10">
+                  <input
+                    id={`input-${idx}-description`}
+                    type="text"
+                    placeholder={idx === 0 ? "Work description..." : ""}
+                    value={item.description || ""}
+                    onChange={(e) => handleItemChange(item.id, "description", e.target.value)}
+                    onKeyDown={(e) => handleKeyDown(e, idx, "description")}
+                    className="w-full bg-transparent border-none outline-none text-themed font-medium px-1 placeholder-slate-600"
+                  />
                 </td>
-                <td className="px-2 py-1 border-r border-white/10 text-center text-slate-400">
-                  {item.unit}
+                <td className="px-1 py-1 border-r border-white/10">
+                  <select
+                    id={`input-${idx}-unit`}
+                    tabIndex="-1"
+                    value={item.unit || "Sq.Ft"}
+                    onChange={(e) => handleItemChange(item.id, "unit", e.target.value)}
+                    onKeyDown={(e) => handleKeyDown(e, idx, "unit")}
+                    className="w-full bg-transparent border-none outline-none text-slate-400 text-center appearance-none cursor-pointer"
+                  >
+                    <option className="bg-slate-800 text-white">Sq.Ft</option>
+                    <option className="bg-slate-800 text-white">L.Ft</option>
+                    <option className="bg-slate-800 text-white">Nos</option>
+                    <option className="bg-slate-800 text-white">LS</option>
+                    <option className="bg-slate-800 text-white">Rmt</option>
+                  </select>
                 </td>
-                <td className="px-2 py-1 border-r border-white/10 text-center">
-                  {item.area}
+                <td className="px-1 py-1 border-r border-white/10">
+                  <input
+                    id={`input-${idx}-area`}
+                    type="text"
+                    inputMode="decimal"
+                    placeholder="0"
+                    value={item.area || ""}
+                    onChange={(e) => handleItemChange(item.id, "area", e.target.value.replace(/[^0-9.]/g, '').replace(/(\..*?)\..*/g, '$1'))}
+                    onKeyDown={(e) => handleKeyDown(e, idx, "area")}
+                    className="w-full bg-transparent border-none outline-none text-center text-themed px-1"
+                  />
                 </td>
-                <td className="px-2 py-1 border-r border-white/10 text-right">
-                  {parseFloat(item.rate).toFixed(2)}
+                <td className="px-1 py-1 border-r border-white/10">
+                  <input
+                    id={`input-${idx}-rate`}
+                    type="text"
+                    inputMode="decimal"
+                    placeholder="0.00"
+                    value={item.rate || ""}
+                    onChange={(e) => handleItemChange(item.id, "rate", e.target.value.replace(/[^0-9.]/g, '').replace(/(\..*?)\..*/g, '$1'))}
+                    onKeyDown={(e) => handleKeyDown(e, idx, "rate")}
+                    className="w-full bg-transparent border-none outline-none text-right text-themed px-1"
+                  />
                 </td>
-                <td className="px-2 py-1 text-right font-black text-amber-400">{item.amount.toFixed(2)}</td>
+                <td className="px-2 py-2 text-right font-black text-amber-400">
+                  {(item.amount || 0).toFixed(2)}
+                </td>
               </tr>
             ))}
             {items.length === 0 && (
@@ -506,6 +602,14 @@ export default function QuotationPage() {
             )}
           </tbody>
         </table>
+        <div className="p-2 border-b border-[var(--border-color)] flex justify-center">
+          <button 
+            onClick={addNewRow}
+            className="flex items-center gap-2 px-4 py-1.5 bg-amber-500/10 text-amber-400 rounded-lg font-bold text-xs hover:bg-amber-500/20 transition-all border border-amber-500/20"
+          >
+            <Plus size={14} strokeWidth={3} /> Add Row
+          </button>
+        </div>
       </div>
 
       {/* ── FOOTER ── */}
@@ -537,34 +641,40 @@ export default function QuotationPage() {
       <div className="bg-[var(--bg-surface)] p-1 flex justify-center gap-1 border-t border-[var(--border-color)]">
         <button
           onClick={clearForm}
-          className="bg-orange-500 hover:bg-orange-600 text-white px-4 py-1.5 rounded flex items-center gap-2 text-xs font-bold transition shadow-sm"
+          className="bg-[#D4AF37] hover:bg-[#c4a133] text-white px-4 py-1.5 rounded flex items-center gap-2 text-xs font-bold transition shadow-sm"
         >
           <RotateCcw size={14} /> Clear
         </button>
         <button
           onClick={() => navigate("/invoices", { state: { activeTab: "quotations" } })}
-          className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-1.5 rounded flex items-center gap-2 text-xs font-bold transition shadow-sm"
+          className="bg-slate-600 hover:bg-slate-700 text-white px-4 py-1.5 rounded flex items-center gap-2 text-xs font-bold transition shadow-sm"
         >
           <History size={14} /> Quotations
         </button>
         <button
-          onClick={() => handlePrint()}
+          onClick={async () => { await saveQuotation(); handlePrint(); }}
           disabled={items.length === 0}
           className="bg-teal-500 hover:bg-teal-600 disabled:opacity-50 text-white px-4 py-1.5 rounded flex items-center gap-2 text-xs font-bold transition shadow-sm"
         >
-          <Printer size={14} /> Print
+          <Printer size={14} /> Generate & Print
         </button>
         <button
           onClick={saveQuotation}
           className="bg-amber-600 hover:bg-amber-700 text-white px-6 py-1.5 rounded flex items-center gap-2 text-xs font-bold transition shadow-sm"
         >
-          <Save size={14} /> Save Quote
+          <Save size={14} /> Generate
         </button>
         <button
           onClick={convertToInvoice}
-          className="bg-emerald-600 hover:bg-emerald-700 text-white px-8 py-1.5 rounded flex items-center gap-2 text-xs font-bold transition shadow-sm"
+          className="bg-emerald-600 hover:bg-emerald-700 text-white px-6 py-1.5 rounded flex items-center gap-2 text-xs font-bold transition shadow-sm"
         >
           <ArrowRight size={14} /> Convert to Invoice
+        </button>
+        <button
+          onClick={convertToWorkOrder}
+          className="bg-purple-600 hover:bg-purple-700 text-white px-6 py-1.5 rounded flex items-center gap-2 text-xs font-bold transition shadow-sm"
+        >
+          <ArrowRight size={14} /> Convert to Work Order
         </button>
       </div>
 

@@ -80,6 +80,31 @@ namespace Mona_Interior.Controllers
             return Ok(new { message = "Contact updated" });
         }
 
+        // DELETE /api/crm/{id}
+        [HttpDelete("{id}")]
+        public async Task<IActionResult> DeleteContact(int id)
+        {
+            var contact = await _db.CrmContacts.FindAsync(id);
+            if (contact == null) return NotFound();
+
+            // Clean up related Activities
+            var activities = await _db.Activities.Where(a => a.ClientId == id.ToString()).ToListAsync();
+            if (activities.Any()) _db.Activities.RemoveRange(activities);
+
+            // Clean up related Deals and their Quotations
+            var deals = await _db.Deals.Where(d => d.ContactId == id).ToListAsync();
+            foreach(var deal in deals)
+            {
+                var quotes = await _db.Quotations.Where(q => q.DealId == deal.Id).ToListAsync();
+                if (quotes.Any()) _db.Quotations.RemoveRange(quotes);
+            }
+            if (deals.Any()) _db.Deals.RemoveRange(deals);
+
+            _db.CrmContacts.Remove(contact);
+            await _db.SaveChangesAsync();
+            return Ok(new { message = "Contact deleted" });
+        }
+
         // ── DEALS ────────────────────────────────────────────────────
 
         // GET /api/crm/deals/all
@@ -174,6 +199,22 @@ namespace Mona_Interior.Controllers
 
             await _db.SaveChangesAsync();
             return Ok(new { message = "Deal updated" });
+        }
+
+        // DELETE /api/crm/deals/{id}
+        [HttpDelete("deals/{id}")]
+        public async Task<IActionResult> DeleteDeal(int id)
+        {
+            var deal = await _db.Deals.FindAsync(id);
+            if (deal == null) return NotFound();
+
+            // Remove associated quotations to avoid FK constraints
+            var quotes = await _db.Quotations.Where(q => q.DealId == deal.Id).ToListAsync();
+            if (quotes.Any()) _db.Quotations.RemoveRange(quotes);
+
+            _db.Deals.Remove(deal);
+            await _db.SaveChangesAsync();
+            return Ok(new { message = "Deal deleted" });
         }
 
         // ── ACTIVITIES ───────────────────────────────────────────────

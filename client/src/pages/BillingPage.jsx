@@ -54,14 +54,6 @@ export default function BillingPage() {
   const [savedQuotations, setSavedQuotations] = useState([]);
   const [savedInvoices, setSavedInvoices] = useState([]);
 
-  const [newItem, setNewItem] = useState({
-    work: "",
-    unit: "Sq.Ft",
-    area: "",
-    price: "",
-    gstPerc: 18,
-  });
-
   // ── MULTI-SESSION LOGIC ──────────────────────────────────────
   const [sessions, setSessions] = useState(() => {
     const saved = localStorage.getItem("billing_sessions");
@@ -96,7 +88,7 @@ export default function BillingPage() {
       setInvoiceId(d.invoiceId || "");
     } else {
       // Clear for a new session if no data
-      setItems([]);
+      setItems([{ id: Date.now(), work: "", unit: "Sq.Ft", area: "", price: "", gstPerc: 18, taxableAmount: 0, gstAmount: 0, amount: 0 }]);
       setClientName("");
       setClientAddress("");
       setBillType("GST");
@@ -109,6 +101,7 @@ export default function BillingPage() {
       setInvoiceNo(""); // Number assigned by backend at save time — no pre-fetch
       setOrganizationName("");
       setGstNumber("");
+      setWorkOrderId("");
       setInvoiceId("");
     }
     localStorage.setItem("active_billing_session", activeSessionId);
@@ -140,6 +133,7 @@ export default function BillingPage() {
                 organizationName,
                 gstNumber,
                 invoiceId,
+                workOrderId,
               },
             }
             : s,
@@ -165,6 +159,7 @@ export default function BillingPage() {
     organizationName,
     gstNumber,
     invoiceId,
+    workOrderId,
   ]);
 
   useEffect(() => {
@@ -184,7 +179,7 @@ export default function BillingPage() {
       // Don't close the last session, just clear it
       setSessions([{ id: "default", title: "New Invoice", data: null }]);
       setActiveSessionId("default");
-      setItems([]);
+      setItems([{ id: Date.now(), work: "", unit: "Sq.Ft", area: "", price: "", gstPerc: 18, taxableAmount: 0, gstAmount: 0, amount: 0 }]);
       setClientName("");
       setClientAddress("");
       setBillType("GST");
@@ -195,6 +190,7 @@ export default function BillingPage() {
       setIsEditMode(false);
       setEditBadge("");
       setInvoiceId("");
+      setWorkOrderId("");
       return;
     }
     const newSessions = sessions.filter((s) => s.id !== id);
@@ -336,10 +332,40 @@ export default function BillingPage() {
       setEditBadge(`Editing Invoice: ${inv.invoiceNo}`);
       setOrganizationName(inv.organizationName || inv.items?.organizationName || "");
       setGstNumber(inv.gstNumber || inv.items?.gstNumber || "");
-      setWorkOrderId(inv.items?.workOrderId || "");
+      setWorkOrderId(inv.workOrderId || inv.items?.workOrderId || "");
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Fetch receipts when workOrderId or clientName changes
+  useEffect(() => {
+    if (!workOrderId && !clientName) {
+      setTotalReceipts(0);
+      return;
+    }
+    const fetchTotalReceipts = async () => {
+      try {
+        const res = await fetch("/api/finance/receipts");
+        if (res.ok) {
+          const data = await res.json();
+          let siteReceipts = [];
+          if (workOrderId) {
+            siteReceipts = data.filter(r => String(r.siteId) === String(workOrderId));
+          } else {
+            siteReceipts = data.filter(r => r.clientName === clientName || r.clientName === organizationName);
+          }
+          const sum = siteReceipts.reduce((acc, curr) => acc + parseFloat(curr.amountPaid || 0), 0);
+          setTotalReceipts(sum);
+          if (!isEditMode) {
+            setReceivedAmount(sum);
+          }
+        }
+      } catch (err) {
+        console.error("Failed to fetch receipts:", err);
+      }
+    };
+    fetchTotalReceipts();
+  }, [workOrderId, clientName, organizationName, isEditMode]);
 
   const fetchFromQuote = (quote) => {
     if (!clientName) {
@@ -406,43 +432,82 @@ export default function BillingPage() {
   const descRef = useRef();
   const handlePrint = useReactToPrint({ contentRef: componentRef });
 
-  const addItem = (e) => {
-    if (e && e.preventDefault) e.preventDefault();
-    if (!newItem.price) return;
-    const taxableAmount =
-      parseFloat(newItem.area || 1) * parseFloat(newItem.price);
-    const effectiveGST =
-      billType === "Non-GST" ? 0 : parseFloat(newItem.gstPerc || 0);
-    const gstAmount = (taxableAmount * effectiveGST) / 100;
-    const totalAmount = taxableAmount + gstAmount;
-    setItems([
-      ...items,
+  const handleItemChange = (id, field, value) => {
+    setItems((prevItems) => {
+      return prevItems.map((item) => {
+        if (item.id === id) {
+          const updatedItem = { ...item, [field]: value };
+          const area = parseFloat(updatedItem.area || 0);
+          const price = parseFloat(updatedItem.price || 0);
+          const taxableAmount = area * price;
+          const effectiveGST = billType === "Non-GST" ? 0 : parseFloat(updatedItem.gstPerc || 0);
+          const gstAmount = (taxableAmount * effectiveGST) / 100;
+          const amount = taxableAmount + gstAmount;
+          return { ...updatedItem, taxableAmount, gstAmount, amount };
+        }
+        return item;
+      });
+    });
+  };
+
+  const handleKeyDown = (e, idx, field) => {
+    const fields = billType === "GST" ? ["work", "area", "price", "gstPerc"] : ["work", "area", "price"];
+    
+    if (e.key === "Enter") {
+      e.preventDefault();
+      if (idx === items.length - 1) {
+        addNewRow();
+      } else {
+        // focus next row if possible, but for now just prevent default
+      }
+    } else if (e.key === "ArrowDown") {
+      e.preventDefault();
+      const nextInput = document.getElementById(`input-${idx + 1}-${field}`);
+      if (nextInput) nextInput.focus();
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      const prevInput = document.getElementById(`input-${idx - 1}-${field}`);
+      if (prevInput) prevInput.focus();
+    } else if (e.key === "ArrowRight") {
+      if (e.target.selectionStart === e.target.value.length) {
+        e.preventDefault();
+        const fieldIdx = fields.indexOf(field);
+        if (fieldIdx < fields.length - 1) {
+          const nextInput = document.getElementById(`input-${idx}-${fields[fieldIdx + 1]}`);
+          if (nextInput) nextInput.focus();
+        }
+      }
+    } else if (e.key === "ArrowLeft") {
+      if (e.target.selectionEnd === 0) {
+        e.preventDefault();
+        const fieldIdx = fields.indexOf(field);
+        if (fieldIdx > 0) {
+          const prevInput = document.getElementById(`input-${idx}-${fields[fieldIdx - 1]}`);
+          if (prevInput) prevInput.focus();
+        }
+      }
+    }
+  };
+
+  const addNewRow = () => {
+    setItems((prev) => [
+      ...prev,
       {
-        ...newItem,
-        gstPerc: effectiveGST,
-        taxableAmount,
-        gstAmount,
-        amount: totalAmount,
-        id: Date.now(),
+        id: Date.now() + Math.random(),
+        work: "",
+        unit: "Sq.Ft",
+        area: "",
+        price: "",
+        gstPerc: billType === "Non-GST" ? 0 : 18,
+        taxableAmount: 0,
+        gstAmount: 0,
+        amount: 0,
       },
     ]);
-    setNewItem({
-      work: "",
-      unit: "Sq.Ft",
-      area: "",
-      price: "",
-      gstPerc: billType === "Non-GST" ? 0 : 18,
-    });
-    setTimeout(() => descRef.current?.focus(), 0);
   };
 
   const removeItem = (id) => {
     setItems(items.filter((item) => item.id !== id));
-  };
-
-  const editItem = (item) => {
-    setNewItem(item);
-    removeItem(item.id);
   };
 
   const subTotal = items.reduce((sum, item) => sum + item.taxableAmount, 0);
@@ -460,42 +525,29 @@ export default function BillingPage() {
     (parseFloat(advanceAmount) || 0) -
     (parseFloat(receivedAmount) || 0);
 
-  useEffect(() => {
-    if (!clientName) {
-      setTotalReceipts(0);
-      return;
-    }
-    const fetchReceipts = async () => {
-      try {
-        const res = await fetch('/api/finance/receipts');
-        if (res.ok) {
-          const savedReceipts = await res.json();
-          const clientReceipts = savedReceipts.filter(r => r.clientName === clientName);
-          const total = clientReceipts.reduce((sum, r) => sum + (parseFloat(r.amountPaid) || 0), 0);
-          setTotalReceipts(total);
-        }
-      } catch (err) {
-        console.error(err);
-      }
-    };
-    fetchReceipts();
-  }, [clientName]);
+
 
   const isAmountMatched = grandTotal === totalReceipts;
 
-  const triggerPrint = () => {
+  const triggerPrint = async () => {
     if (!isAmountMatched && grandTotal > 0) {
       showDialog({
-        title: "Print Disabled",
-        message: `Payment receipts total (₹${totalReceipts}) does not match the final invoice amount (₹${grandTotal}). Please save as Draft.`,
-        type: "alert"
+        title: "Amount Mismatch Warning",
+        message: `Payment receipts total (₹${totalReceipts}) does not match the final invoice amount (₹${grandTotal}). Are you sure you want to generate this invoice anyway?`,
+        type: "confirm",
+        onConfirm: async () => {
+          await saveInvoice(true);
+          handlePrint();
+        }
       });
       return;
     }
+    await saveInvoice(true);
     handlePrint();
   };
 
-  const saveInvoice = async () => {
+  const saveInvoice = async (forceFinal = false) => {
+    const isForceFinal = forceFinal === true;
     if (!clientName || items.length === 0) {
       showDialog({ title: "Missing Information", message: "Please select a client and add at least one item.", type: "alert" });
       return;
@@ -531,7 +583,7 @@ export default function BillingPage() {
       date: new Date().toISOString().split("T")[0], // For database
       total: grandTotal,
       billType,
-      status: (isAmountMatched || grandTotal === 0) ? "Unpaid" : "Draft",
+      status: (isAmountMatched || grandTotal === 0 || isForceFinal) ? "Unpaid" : "Draft",
     };
 
     try {
@@ -571,6 +623,31 @@ export default function BillingPage() {
         message: (isEditMode || invoiceId) ? "Invoice Updated Successfully!" : "Invoice Saved Successfully!",
         type: "success"
       });
+      setTimeout(() => {
+        if (!isEditMode) {
+          // Properly refresh the billing page for the next invoice
+          setItems([{ id: Date.now(), work: "", unit: "Sq.Ft", area: "", price: "", gstPerc: 18, taxableAmount: 0, gstAmount: 0, amount: 0 }]);
+          setClientName("");
+          setClientAddress("");
+          setProjectTitle("");
+          setWorkDescription("");
+          setDiscount(0);
+          setLessAmount(0);
+          setAdvanceAmount(0);
+          setReceivedAmount(0);
+          setIsEditMode(false);
+          setEditBadge("");
+          setOrganizationName("");
+          setGstNumber("");
+          setWorkOrderId("");
+          setInvoiceId("");
+          
+          fetch("/api/finance/invoices/next-number")
+            .then((res) => res.json())
+            .then((data) => setInvoiceNo(data.nextNumber))
+            .catch(() => setInvoiceNo(""));
+        }
+      }, 1500);
     } catch (err) {
       console.error(err);
       showDialog({ title: "Error", message: "An error occurred while saving.", type: "error" });
@@ -629,7 +706,6 @@ export default function BillingPage() {
   const toggleBillType = (type) => {
     setBillType(type);
     const newGst = type === "Non-GST" ? 0 : 18;
-    setNewItem((p) => ({ ...p, gstPerc: newGst }));
 
     setItems((prevItems) =>
       prevItems.map((item) => {
@@ -651,7 +727,7 @@ export default function BillingPage() {
       message: "Are you sure you want to clear all data in this invoice? This cannot be undone.",
       type: "confirm",
       onConfirm: () => {
-        setItems([]);
+        setItems([{ id: Date.now(), work: "", unit: "Sq.Ft", area: "", price: "", gstPerc: 18, taxableAmount: 0, gstAmount: 0, amount: 0 }]);
         setClientName("");
         setClientAddress("");
         setProjectTitle("");
@@ -749,11 +825,11 @@ export default function BillingPage() {
             <input
               disabled
               value={invoiceNo}
-              className="w-full bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 px-2 py-1 text-sm font-bold outline-none"
+              className="w-full bg-[var(--accent)]/10 border border-[var(--accent)]/20 text-[var(--accent)] px-2 py-1 text-sm font-bold outline-none"
             />
             <button
               onClick={() => navigate("/invoices")}
-              className="bg-blue-600 text-white px-2 hover:bg-blue-700 transition"
+              className="btn-accent px-2 hover:opacity-90 transition"
               title="View Invoice History"
             >
               <History size={14} />
@@ -767,7 +843,7 @@ export default function BillingPage() {
           <input
             disabled
             value={invoiceDate}
-            className="w-full bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 px-2 py-1 text-sm font-bold outline-none"
+            className="w-full bg-[var(--accent)]/10 border border-[var(--accent)]/20 text-[var(--accent)] px-2 py-1 text-sm font-bold outline-none"
           />
         </div>
         {/* Bill Type Toggle */}
@@ -778,7 +854,7 @@ export default function BillingPage() {
           <div className="flex bg-white/10 rounded p-0.5 gap-0.5">
             <button
               onClick={() => toggleBillType("GST")}
-              className={`flex-1 py-1 text-[10px] font-black uppercase rounded transition ${billType === "GST" ? "bg-blue-600 text-white" : "text-slate-500 hover:text-slate-700"}`}
+              className={`flex-1 py-1 text-[10px] font-black uppercase rounded transition ${billType === "GST" ? "btn-accent" : "text-slate-500 hover:text-slate-700"}`}
             >
               GST
             </button>
@@ -803,7 +879,7 @@ export default function BillingPage() {
             />
             <button
               onClick={() => setShowWorkOrderSearch(true)}
-              className="bg-indigo-600 text-white px-2 text-[10px] font-bold hover:bg-indigo-700 whitespace-nowrap"
+              className="btn-accent px-2 text-[10px] font-bold whitespace-nowrap"
             >
               SELECT WO
             </button>
@@ -890,97 +966,7 @@ export default function BillingPage() {
         </div>
       </div>
 
-      {/* Work Entry Row */}
-      <div className="themed-card border-l-4 border-l-orange-400 p-1 grid grid-cols-12 gap-1 border-b border-[var(--border-color)]">
-        <div className="col-span-4">
-          <label className="block text-[10px] font-bold text-muted text-center uppercase">
-            Work Description
-          </label>
-          <input
-            ref={descRef}
-            placeholder="e.g. False Ceiling"
-            value={newItem.work}
-            onChange={(e) => setNewItem({ ...newItem, work: e.target.value })}
-            onKeyPress={(e) => e.key === "Enter" && addItem()}
-            className="w-full themed-input border border-[var(--border-color)] px-2 py-1 text-sm outline-none focus:border-orange-400"
-          />
-        </div>
-        <div className="col-span-1">
-          <label className="block text-[10px] font-bold text-muted text-center uppercase">
-            Unit
-          </label>
-          <select
-            value={newItem.unit}
-            onChange={(e) => setNewItem({ ...newItem, unit: e.target.value })}
-            className="w-full themed-input border border-[var(--border-color)] px-2 py-1 text-sm outline-none focus:border-orange-400"
-          >
-            <option>Sq.Ft</option>
-            <option>L.Ft</option>
-            <option>Nos</option>
-            <option>LS</option>
-          </select>
-        </div>
-        <div className="col-span-1">
-          <label className="block text-[10px] font-bold text-muted text-center uppercase">
-            Area
-          </label>
-          <input
-            type="number"
-            value={newItem.area}
-            onChange={(e) => setNewItem({ ...newItem, area: e.target.value })}
-            className="w-full themed-input border border-[var(--border-color)] px-2 py-1 text-sm text-center outline-none focus:border-orange-400"
-          />
-        </div>
-        <div className="col-span-2">
-          <label className="block text-[10px] font-bold text-orange-800 text-center uppercase tracking-tighter">
-            Price / Unit(₹)
-          </label>
-          <input
-            type="number"
-            value={newItem.price}
-            onChange={(e) => setNewItem({ ...newItem, price: e.target.value })}
-            onKeyPress={(e) => e.key === "Enter" && addItem()}
-            className="w-full themed-input border border-[var(--border-color)] px-2 py-1 text-sm text-right outline-none focus:border-orange-400 font-bold"
-          />
-        </div>
-        {billType === "GST" && (
-          <div className="col-span-1">
-            <label className="block text-[10px] font-bold text-muted text-center uppercase">
-              GST %
-            </label>
-            <input
-              type="number"
-              value={newItem.gstPerc}
-              onChange={(e) =>
-                setNewItem({ ...newItem, gstPerc: e.target.value })
-              }
-              className="w-full themed-input border border-[var(--border-color)] px-2 py-1 text-sm text-center outline-none focus:border-orange-400"
-            />
-          </div>
-        )}
-        <div className={billType === "GST" ? "col-span-2" : "col-span-3"}>
-          <label className="block text-[10px] font-bold text-muted text-center uppercase">
-            {billType === "GST" ? "Total Incl Tax ₹" : "Amount ₹"}
-          </label>
-          <div className="w-full themed-card border border-[var(--border-color)] px-2 py-1 text-sm text-right font-bold text-orange-500 h-[26px]">
-            {(
-              parseFloat(newItem.area || 1) *
-              parseFloat(newItem.price || 0) *
-              (1 + parseFloat(newItem.gstPerc || 0) / 100)
-            ).toFixed(2)}
-          </div>
-        </div>
-        <div className="col-span-1 flex items-end">
-          <button
-            onClick={addItem}
-            type="button"
-            className="w-full bg-orange-600 hover:bg-orange-700 text-white h-[26px] flex items-center justify-center rounded shadow-sm transition-all active:scale-95"
-            title="Add Item to Invoice"
-          >
-            <Plus size={16} strokeWidth={3} />
-          </button>
-        </div>
-      </div>
+
 
       {/* Main Table Area */}
       <div className="flex-grow bg-[var(--bg-surface)] overflow-y-auto">
@@ -1027,49 +1013,90 @@ export default function BillingPage() {
                 <td className="px-2 py-1 border-r border-[var(--border-color)] text-center">
                   <div className="flex justify-center gap-2">
                     <button
-                      onClick={() => editItem(item)}
-                      className="text-blue-500 hover:text-blue-700"
-                    >
-                      <Edit size={12} />
-                    </button>
-                    <button
                       onClick={() => removeItem(item.id)}
-                      className="text-red-500 hover:text-red-700"
+                      className="text-red-500 hover:text-red-700 p-1"
+                      title="Remove Row"
                     >
-                      <Trash2 size={12} />
+                      <Trash2 size={14} />
                     </button>
                   </div>
                 </td>
                 <td className="px-2 py-1 border-r border-white/10 text-center font-bold text-gray-400">
                   {idx + 1}
                 </td>
-                <td className="px-2 py-1 border-r border-white/10 text-left text-themed font-medium truncate max-w-[200px]" title={item.work}>
-                  {item.work}
+                <td className="px-1 py-1 border-r border-white/10">
+                  <input
+                    id={`input-${idx}-work`}
+                    type="text"
+                    placeholder={idx === 0 ? "Work description..." : ""}
+                    value={item.work || ""}
+                    onChange={(e) => handleItemChange(item.id, "work", e.target.value)}
+                    onKeyDown={(e) => handleKeyDown(e, idx, "work")}
+                    className="w-full bg-transparent border-none outline-none text-themed font-medium px-1 placeholder-slate-600"
+                  />
                 </td>
-                <td className="px-2 py-1 border-r border-white/10 text-center text-slate-400">
-                  {item.unit}
+                <td className="px-1 py-1 border-r border-white/10">
+                  <select
+                    id={`input-${idx}-unit`}
+                    tabIndex="-1"
+                    value={item.unit || "Sq.Ft"}
+                    onChange={(e) => handleItemChange(item.id, "unit", e.target.value)}
+                    onKeyDown={(e) => handleKeyDown(e, idx, "unit")}
+                    className="w-full bg-transparent border-none outline-none text-slate-400 text-center appearance-none cursor-pointer"
+                  >
+                    <option className="bg-slate-800 text-white">Sq.Ft</option>
+                    <option className="bg-slate-800 text-white">L.Ft</option>
+                    <option className="bg-slate-800 text-white">Nos</option>
+                    <option className="bg-slate-800 text-white">LS</option>
+                  </select>
                 </td>
-                <td className="px-2 py-1 border-r border-[var(--border-color)] text-center">
-                  {item.area}
+                <td className="px-1 py-1 border-r border-[var(--border-color)]">
+                  <input
+                    id={`input-${idx}-area`}
+                    type="text"
+                    inputMode="decimal"
+                    placeholder="0"
+                    value={item.area || ""}
+                    onChange={(e) => handleItemChange(item.id, "area", e.target.value.replace(/[^0-9.]/g, '').replace(/(\..*?)\..*/g, '$1'))}
+                    onKeyDown={(e) => handleKeyDown(e, idx, "area")}
+                    className="w-full bg-transparent border-none outline-none text-center text-themed px-1"
+                  />
                 </td>
-                <td className="px-2 py-1 border-r border-white/10 text-right">
-                  {parseFloat(item.price).toFixed(2)}
+                <td className="px-1 py-1 border-r border-white/10">
+                  <input
+                    id={`input-${idx}-price`}
+                    type="text"
+                    inputMode="decimal"
+                    placeholder="0.00"
+                    value={item.price || ""}
+                    onChange={(e) => handleItemChange(item.id, "price", e.target.value.replace(/[^0-9.]/g, '').replace(/(\..*?)\..*/g, '$1'))}
+                    onKeyDown={(e) => handleKeyDown(e, idx, "price")}
+                    className="w-full bg-transparent border-none outline-none text-right text-themed px-1"
+                  />
                 </td>
-                <td className="px-2 py-1 border-r border-white/10 text-right font-semibold text-slate-400">
-                  {item.taxableAmount.toFixed(2)}
+                <td className="px-2 py-2 border-r border-white/10 text-right font-semibold text-slate-400">
+                  {(item.taxableAmount || 0).toFixed(2)}
                 </td>
                 {billType === "GST" && (
                   <>
-                    <td className="px-2 py-1 border-r border-white/10 text-center text-blue-600">
-                      {item.gstPerc}%
+                    <td className="px-1 py-1 border-r border-white/10 text-center text-blue-600">
+                      <input
+                        id={`input-${idx}-gstPerc`}
+                        type="text"
+                        inputMode="decimal"
+                        value={item.gstPerc !== undefined ? item.gstPerc : 18}
+                        onChange={(e) => handleItemChange(item.id, "gstPerc", e.target.value.replace(/[^0-9.]/g, '').replace(/(\..*?)\..*/g, '$1'))}
+                        onKeyDown={(e) => handleKeyDown(e, idx, "gstPerc")}
+                        className="w-full bg-transparent border-none outline-none text-center text-blue-500 px-1"
+                      />
                     </td>
-                    <td className="px-2 py-1 border-r border-white/10 text-right text-blue-700 font-medium">
-                      {item.gstAmount.toFixed(2)}
+                    <td className="px-2 py-2 border-r border-white/10 text-right text-blue-700 font-medium">
+                      {(item.gstAmount || 0).toFixed(2)}
                     </td>
                   </>
                 )}
-                <td className="px-2 py-1 text-right font-black text-themed">
-                  {item.amount.toFixed(2)}
+                <td className="px-2 py-2 text-right font-black text-themed">
+                  {(item.amount || 0).toFixed(2)}
                 </td>
               </tr>
             ))}
@@ -1085,6 +1112,14 @@ export default function BillingPage() {
             )}
           </tbody>
         </table>
+        <div className="p-2 border-b border-[var(--border-color)] flex justify-center">
+          <button 
+            onClick={addNewRow}
+            className="flex items-center gap-2 px-4 py-1.5 bg-[var(--accent)]/10 text-[var(--accent)] rounded-lg font-bold text-xs hover:bg-[var(--accent)]/20 transition-all border border-[var(--accent)]/20"
+          >
+            <Plus size={14} strokeWidth={3} /> Add Row
+          </button>
+        </div>
       </div>
 
       {/* Footer Section */}
@@ -1118,17 +1153,17 @@ export default function BillingPage() {
         <div className="grid grid-cols-2 gap-x-4 gap-y-1 bg-white/5 border border-white/10 p-2 rounded-lg">
           <div className="flex items-center justify-between gap-2">
             <label className="text-[10px] font-bold text-muted uppercase">Invoice Disc %</label>
-            <input type="number" value={discount} onChange={(e) => setDiscount(e.target.value)}
+            <input type="text" inputMode="decimal" pattern="^\d*\.?\d*$" value={discount} onChange={(e) => setDiscount(e.target.value.replace(/[^0-9.]/g, '').replace(/(\..*?)\..*/g, '$1'))}
               className="w-20 themed-input border border-[var(--border-color)] px-1 py-0.5 text-xs text-right outline-none focus:border-orange-400 rounded" />
           </div>
           <div className="flex items-center justify-between gap-2">
             <label className="text-[10px] font-bold text-muted uppercase">Invoice Less ₹</label>
-            <input type="number" value={lessAmount} onChange={(e) => setLessAmount(e.target.value)}
+            <input type="text" inputMode="decimal" pattern="^\d*\.?\d*$" value={lessAmount} onChange={(e) => setLessAmount(e.target.value.replace(/[^0-9.]/g, '').replace(/(\..*?)\..*/g, '$1'))}
               className="w-20 themed-input border border-[var(--border-color)] px-1 py-0.5 text-xs text-right outline-none focus:border-orange-400 rounded" />
           </div>
           <div className="flex items-center justify-between gap-2">
             <label className="text-[10px] font-bold text-muted uppercase">Amount Received</label>
-            <input type="number" value={receivedAmount} onChange={(e) => setReceivedAmount(e.target.value)}
+            <input type="text" inputMode="decimal" pattern="^\d*\.?\d*$" value={receivedAmount} onChange={(e) => setReceivedAmount(e.target.value.replace(/[^0-9.]/g, '').replace(/(\..*?)\..*/g, '$1'))}
               className="w-20 themed-input border border-[var(--border-color)] px-1 py-0.5 text-xs text-right outline-none focus:border-orange-400 rounded" />
           </div>
         </div>
@@ -1148,13 +1183,13 @@ export default function BillingPage() {
       <div className="bg-slate-800 p-1 flex justify-center gap-1">
         <button
           onClick={clearForm}
-          className="bg-orange-500 hover:bg-orange-600 text-white px-4 py-1.5 rounded flex items-center gap-2 text-xs font-bold transition shadow-sm"
+          className="bg-[#D4AF37] hover:bg-[#c4a133] text-white px-4 py-1.5 rounded flex items-center gap-2 text-xs font-bold transition shadow-sm"
         >
           <RotateCcw size={14} /> Clear - F8
         </button>
         <button
           onClick={() => navigate("/invoices")}
-          className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-1.5 rounded flex items-center gap-2 text-xs font-bold transition shadow-sm"
+          className="btn-accent px-4 py-1.5 rounded flex items-center gap-2 text-xs font-bold transition shadow-sm"
         >
           <History size={14} /> Invoices - F9
         </button>
@@ -1166,16 +1201,16 @@ export default function BillingPage() {
         </button>
         <button
           onClick={triggerPrint}
-          className={`${!isAmountMatched && grandTotal > 0 ? "bg-slate-400 cursor-not-allowed" : "bg-teal-500 hover:bg-teal-600"} text-white px-4 py-1.5 rounded flex items-center gap-2 text-xs font-bold transition shadow-sm`}
+          className="bg-teal-500 hover:bg-teal-600 text-white px-4 py-1.5 rounded flex items-center gap-2 text-xs font-bold transition shadow-sm"
         >
-          <Printer size={14} /> Print - F5
+          <Printer size={14} /> Generate & Print - F5
         </button>
         <button
           onClick={saveInvoice}
           className={`${!isAmountMatched && grandTotal > 0 ? "bg-slate-600 hover:bg-slate-700" : isEditMode ? "bg-violet-600 hover:bg-violet-700" : "bg-emerald-600 hover:bg-emerald-700"} text-white px-8 py-1.5 rounded flex items-center gap-2 text-xs font-bold transition shadow-sm`}
         >
           {isEditMode ? <Edit3 size={14} /> : <Save size={14} />}
-          {!isAmountMatched && grandTotal > 0 ? "Save as Draft" : isEditMode ? "Update Invoice" : "Save - F2"}
+          {!isAmountMatched && grandTotal > 0 ? "Save as Draft" : isEditMode ? "Update Invoice" : "Generate - F2"}
         </button>
       </div>
 
@@ -1229,7 +1264,7 @@ export default function BillingPage() {
       {showWorkOrderSearch && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
           <div className="themed-modal border border-[var(--border-color)] rounded-2xl w-full max-w-2xl overflow-hidden shadow-2xl">
-            <div className="bg-indigo-600 p-4 text-white flex justify-between items-center">
+            <div className="bg-[var(--accent)] p-4 text-white flex justify-between items-center">
               <h3 className="font-bold flex items-center gap-2">
                 <Search size={20} /> Select Work Order
               </h3>
@@ -1247,7 +1282,7 @@ export default function BillingPage() {
                 {workOrders.map((wo) => (
                   <div
                     key={wo.id}
-                    className="border border-[var(--border-color)] p-3 rounded-xl hover:bg-indigo-500/10 flex justify-between items-center transition"
+                    className="border border-[var(--border-color)] p-3 rounded-xl hover:bg-[var(--accent)]/10 flex justify-between items-center transition"
                   >
                     <div>
                       <p className="font-bold text-themed">{wo.name}</p>
@@ -1260,7 +1295,7 @@ export default function BillingPage() {
                     </div>
                     <button
                       onClick={() => fetchFromWorkOrder(wo)}
-                      className="bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 px-4 py-2 rounded-lg font-bold text-xs hover:bg-indigo-500/20 transition"
+                      className="bg-[var(--accent)]/10 text-[var(--accent)] border border-[var(--accent)]/20 px-4 py-2 rounded-lg font-bold text-xs hover:bg-[var(--accent)]/20 transition"
                     >
                       SELECT
                     </button>

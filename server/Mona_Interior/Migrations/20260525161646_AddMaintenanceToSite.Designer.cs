@@ -3,6 +3,7 @@ using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Mona_Interior;
 
@@ -11,9 +12,11 @@ using Mona_Interior;
 namespace Mona_Interior.Migrations
 {
     [DbContext(typeof(MonainteriorDbContext))]
-    partial class MonainteriorDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260525161646_AddMaintenanceToSite")]
+    partial class AddMaintenanceToSite
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -65,9 +68,6 @@ namespace Mona_Interior.Migrations
 
                     b.Property<int>("EmployeeId")
                         .HasColumnType("int");
-
-                    b.Property<decimal>("Overtime")
-                        .HasColumnType("decimal(18,2)");
 
                     b.Property<string>("Status")
                         .IsRequired()

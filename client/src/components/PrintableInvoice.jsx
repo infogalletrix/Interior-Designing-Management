@@ -7,14 +7,16 @@ const PrintableInvoice = forwardRef(({ data, docType }, ref) => {
   return (
     <div
       ref={ref}
-      className="p-10 bg-white text-black font-sans w-full max-w-4xl mx-auto"
+      className="p-10 bg-white text-black font-sans w-full max-w-4xl mx-auto min-h-[100vh] flex flex-col"
     >
       {/* Header */}
       <div className="flex justify-between border-b-2 border-slate-900 pb-6 mb-8">
-        <div>
-          <h1 className="text-3xl font-bold">Mona Interior Studio</h1>
-          <p>Professional Interior Design Services</p>
-          <p className="text-xs text-gray-500 mt-1 italic">Computer Generated Sales Invoice</p>
+        <div className="flex items-center gap-4">
+          <img src="/logo.png" alt="Logo" className="w-20 h-20 object-contain rounded-lg" onError={(e) => { e.target.onerror = null; e.target.style.display = 'none'; }} />
+          <div>
+            <h1 className="text-3xl font-bold">Mona Interior Studio</h1>
+            <p>Professional Interior Design Services</p>
+          </div>
         </div>
         <div className="text-right">
           <h2 className="text-2xl font-bold uppercase">{docType}</h2>
@@ -81,7 +83,7 @@ const PrintableInvoice = forwardRef(({ data, docType }, ref) => {
               <td className="p-2 border text-right">{item.taxableAmount.toFixed(2)}</td>
               {safeData.totalGst > 0 && (
                 <>
-                  <td className="p-2 border text-center text-blue-600 font-bold">{item.gstPerc}%</td>
+                  <td className="p-2 border text-center text-gray-900 font-bold">{item.gstPerc}%</td>
                   <td className="p-2 border text-right font-medium">{item.gstAmount.toFixed(2)}</td>
                 </>
               )}
@@ -115,9 +117,12 @@ const PrintableInvoice = forwardRef(({ data, docType }, ref) => {
           )}
           <div className="mt-4">
             <p className="font-bold uppercase mb-1">Terms & Conditions:</p>
-            <p>1. {safeData.totalGst > 0 ? "This is a GST compliant service invoice." : "Non-GST service bill."}</p>
+            <p>1. {safeData.billType === "GST" ? "This is a GST compliant service document." : "Non-GST service bill."}</p>
             <p>2. Payment due as per the agreed schedule.</p>
             <p>3. Subject to local jurisdiction.</p>
+            {safeData.billType === "GST" && docType === "Quotation" && (
+              <p>4. This is not including GST. The GST will be applicable.</p>
+            )}
           </div>
         </div>
         
@@ -143,32 +148,14 @@ const PrintableInvoice = forwardRef(({ data, docType }, ref) => {
 
           <div className="flex justify-between font-bold text-xl border-t border-gray-900 pt-2 mt-2">
             <span>Net Payable:</span> 
-            <span className="text-emerald-700">₹{(safeData.grandTotal || 0).toFixed(2)}</span>
+            <span className="text-black">₹{(safeData.grandTotal || 0).toFixed(2)}</span>
           </div>
 
-          <div className="bg-gray-50 p-2 mt-4 space-y-1 text-xs">
-
-            {(parseFloat(safeData.receivedAmount) > 0) && (
-              <div className="flex justify-between">
-                <span>Received Now:</span> 
-                <span>₹{parseFloat(safeData.receivedAmount).toFixed(2)}</span>
-              </div>
-            )}
-            <div className="flex justify-between font-bold border-t border-gray-200 pt-1 text-red-600">
-              <span>Balance Due:</span> 
-              <span>₹{(safeData.balanceAmount || 0).toFixed(2)}</span>
-            </div>
-          </div>
         </div>
       </div>
 
-      <div className="mt-20 flex justify-between">
-        <div className="text-center border-t border-gray-400 pt-2 w-40 text-xs">
-          Customer's Signature
-        </div>
-        <div className="text-center border-t border-gray-400 pt-2 w-40 text-xs">
-          Authorized Signatory
-        </div>
+      <div className="mt-auto pt-4 border-t border-gray-300 text-center">
+        <p className="text-xs text-gray-500 italic font-medium">This is a computer generated document and does not require a physical signature.</p>
       </div>
     </div>
   );

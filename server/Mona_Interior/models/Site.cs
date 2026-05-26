@@ -25,10 +25,16 @@ namespace Mona_Interior.models
 
         public string Description { get; set; } = string.Empty;
 
+        public bool IsNegotiated { get; set; } = false;
+        public string NegotiationDetails { get; set; } = string.Empty;
+
         public bool IsArchived { get; set; } = false;
 
         // JSON array for work history entries
         [Column(TypeName = "longtext")]
         public string WorkHistory { get; set; } = "[]";
+
+        [Column(TypeName = "longtext")]
+        public string Maintenance { get; set; } = "{}";
     }
 }

@@ -14,7 +14,10 @@ namespace Mona_Interior.Dtos
         public string StartDate { get; set; } = string.Empty;
         public decimal Budget { get; set; }
         public string Description { get; set; } = string.Empty;
+        public bool IsNegotiated { get; set; }
+        public string NegotiationDetails { get; set; } = string.Empty;
         public bool IsArchived { get; set; }
         public JsonElement? WorkHistory { get; set; }
+        public JsonElement? Maintenance { get; set; }
     }
 }

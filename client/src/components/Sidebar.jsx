@@ -46,6 +46,9 @@ const Sidebar = ({ isOpen, toggleSidebar }) => {
       canAdd: true,
     },
 
+    { type: "header", name: "PROJECTS" },
+    { path: "/sites", name: "Work Orders", icon: <MapPin size={20} /> },
+
     { type: "header", name: "FINANCE" },
     {
       path: "/billing",
@@ -62,9 +65,6 @@ const Sidebar = ({ isOpen, toggleSidebar }) => {
     { path: "/expenses", name: "Expenses & credits", icon: <Receipt size={20} /> },
     { path: "/accounts", name: "Accounts", icon: <Landmark size={20} /> },
 
-    { type: "header", name: "PROJECTS" },
-    { path: "/sites", name: "Work Orders", icon: <MapPin size={20} /> },
-
     { type: "header", name: "HUMAN RESOURCES" },
     { path: "/employees", name: "Employees", icon: <Briefcase size={20} /> },
     { path: "/attendance", name: "Attendance", icon: <MapPin size={20} /> },
@@ -78,27 +78,30 @@ const Sidebar = ({ isOpen, toggleSidebar }) => {
         isOpen ? "w-64" : "w-20"
       } ${ t.isDark
         ? "bg-slate-900/80 backdrop-blur-xl border-r border-white/10 text-slate-200"
-        : "bg-[#fff8ed] border-r border-amber-200 text-[#1c1009]"
+        : "bg-[#111827] border-r border-slate-800 text-slate-100"
       } flex flex-col h-screen transition-all duration-300 relative shadow-2xl flex-shrink-0 z-20`}
     >
       {/* Header */}
       <div
         onClick={toggleSidebar}
-        className={`py-5 px-4 flex items-center cursor-pointer group transition ${ t.isDark ? "hover:bg-white/5 border-b border-white/10" : "hover:bg-amber-100 border-b border-amber-200"}`}
+        className={`py-5 px-4 flex items-center cursor-pointer group transition ${ t.isDark ? "hover:bg-white/5 border-b border-white/10" : "hover:bg-slate-800 border-b border-slate-800"}`}
         title={isOpen ? "Collapse Sidebar" : "Expand Sidebar"}
       >
         <div className={`flex items-center gap-3 ${!isOpen ? "justify-center w-full" : ""}`}>
-          <div className={`flex-shrink-0 ${ t.isDark ? "text-violet-400" : "text-orange-500"}`}>
-            {isOpen ? <ChevronLeft size={22} /> : <Menu size={22} />}
+          <div className={`flex-shrink-0 ${ t.isDark ? "text-violet-400" : "text-[#D4AF37]"}`}>
+            {isOpen ? <ChevronLeft size={22} /> : <img src="/logo.png" alt="Logo" className="w-8 h-8 rounded-md object-cover shadow-md" onError={(e) => { e.target.onerror = null; e.target.style.display = 'none'; }} />}
           </div>
           {isOpen && (
-            <div>
-              <h2 className={`text-base font-black whitespace-nowrap leading-tight ${ t.isDark ? "bg-gradient-to-r from-violet-400 to-indigo-400 bg-clip-text text-transparent" : "text-orange-600"}`}>
-                Mona Interior
-              </h2>
-              <p className={`text-[10px] font-bold uppercase tracking-widest ${ t.isDark ? "text-slate-500" : "text-amber-700"}`}>
-                Studio CRM
-              </p>
+            <div className="flex items-center gap-2">
+              <img src="/logo.png" alt="Mona Interior Studio" className="w-10 h-10 rounded-md object-cover shadow-sm bg-white" onError={(e) => { e.target.onerror = null; e.target.style.display = 'none'; }} />
+              <div>
+                <h2 className={`text-base font-black whitespace-nowrap leading-tight ${ t.isDark ? "bg-gradient-to-r from-violet-400 to-indigo-400 bg-clip-text text-transparent" : "text-white"}`}>
+                  Mona Interior
+                </h2>
+                <p className={`text-[10px] font-bold uppercase tracking-widest ${ t.isDark ? "text-slate-500" : "text-slate-300"}`}>
+                  Studio CRM
+                </p>
+              </div>
             </div>
           )}
         </div>
@@ -110,12 +113,12 @@ const Sidebar = ({ isOpen, toggleSidebar }) => {
           if (item.type === "header") {
             return isOpen ? (
               <li key={index} className="px-3 pt-5 pb-2">
-                <span className={`text-[9px] font-black uppercase tracking-[0.2em] ${ t.isDark ? "text-slate-600" : "text-amber-400"}`}>
+                <span className={`text-[9px] font-black uppercase tracking-[0.2em] ${ t.isDark ? "text-slate-600" : "text-slate-400"}`}>
                   {item.name}
                 </span>
               </li>
             ) : (
-              <li key={index} className={`h-px my-3 mx-2 ${ t.isDark ? "bg-white/10" : "bg-amber-200"}`} />
+              <li key={index} className={`h-px my-3 mx-2 ${ t.isDark ? "bg-white/10" : "bg-slate-800"}`} />
             );
           }
 
@@ -131,15 +134,15 @@ const Sidebar = ({ isOpen, toggleSidebar }) => {
                   isActive
                     ? t.isDark
                       ? "bg-violet-600/80 text-white shadow-lg shadow-violet-900/40"
-                      : "bg-orange-500 text-white shadow-lg shadow-orange-200"
+                      : "bg-white/10 text-[#D4AF37] shadow-lg shadow-black/20"
                     : t.isDark
                       ? "text-slate-400 hover:text-white hover:bg-white/5"
-                      : "text-amber-800 hover:text-orange-600 hover:bg-amber-100"
+                      : "text-slate-200 hover:text-white hover:bg-white/10"
                 }`}
               >
                 <span className="flex-shrink-0">{item.icon}</span>
                 {isOpen && (
-                  <span className="font-semibold whitespace-nowrap text-sm">
+                  <span className="whitespace-nowrap text-[15px]" style={{ fontFamily: "'Inter', sans-serif", fontWeight: 400, letterSpacing: '0.01em' }}>
                     {item.name}
                   </span>
                 )}
@@ -150,17 +153,17 @@ const Sidebar = ({ isOpen, toggleSidebar }) => {
       </ul>
 
       {/* Footer */}
-      <div className={`p-4 flex flex-col items-center gap-2 border-t ${ t.isDark ? "border-white/10" : "border-amber-200"}`}>
+      <div className={`p-4 flex flex-col items-center gap-2 border-t ${ t.isDark ? "border-white/10" : "border-slate-800"}`}>
         <button
           onClick={toggleTheme}
-          className={`flex items-center justify-center p-2 rounded-xl transition-all duration-200 ${ t.isDark ? "text-slate-400 hover:text-white hover:bg-white/5" : "text-amber-700 hover:text-orange-600 hover:bg-amber-100"} ${isOpen ? "w-full gap-3" : "w-10 h-10"}`}
+          className={`flex items-center justify-center p-2 rounded-xl transition-all duration-200 ${ t.isDark ? "text-slate-400 hover:text-white hover:bg-white/5" : "text-slate-300 hover:text-white hover:bg-white/10"} ${isOpen ? "w-full gap-3" : "w-10 h-10"}`}
           title={isDarkMode ? "Switch to Light Mode" : "Switch to Dark Mode"}
         >
           {isDarkMode ? <Sun size={20} /> : <Moon size={20} />}
           {isOpen && <span className="font-semibold text-sm">{isDarkMode ? "Light Mode" : "Dark Mode"}</span>}
         </button>
         {isOpen && (
-          <p className={`text-[10px] text-center font-bold uppercase tracking-widest mt-2 ${ t.isDark ? "text-slate-600" : "text-amber-400"}`}>
+          <p className={`text-[10px] text-center font-bold uppercase tracking-widest mt-2 ${ t.isDark ? "text-slate-600" : "text-slate-400"}`}>
             © 2026 Mona Interior
           </p>
         )}

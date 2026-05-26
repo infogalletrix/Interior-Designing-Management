@@ -47,6 +47,7 @@ export default function ExpensePage() {
   
   // Bulk States
   const [bulkItems, setBulkItems] = useState([]);
+  const [bulkTransactionType, setBulkTransactionType] = useState("Expense");
   const [bulkExpenseType, setBulkExpenseType] = useState("Client");
   const [bulkDate, setBulkDate] = useState(new Date().toISOString().split("T")[0]);
   const [bulkClient, setBulkClient] = useState("");
@@ -64,19 +65,21 @@ export default function ExpensePage() {
       showDialog({ title: "Missing Information", message: "Please fill out description and cost.", type: "alert" });
       return;
     }
-    if (bulkExpenseType === "Client" && !bulkClient) {
+    const isCredit = bulkTransactionType === "Credit";
+    const actualType = isCredit ? "Credit" : bulkExpenseType;
+    if (actualType === "Client" && !bulkClient) {
       showDialog({ title: "Missing Work Order", message: "Please select a Work Order before adding.", type: "alert" });
       return;
     }
     setBulkItems([...bulkItems, {
       ...bulkNewItem,
       id: Date.now(),
-      expenseType: bulkExpenseType,
+      expenseType: actualType,
       date: bulkDate,
-      client: bulkExpenseType === "Client" ? bulkClient : "",
-      category: bulkExpenseType === "Overhead" ? bulkCategory : "",
-      description: bulkExpenseType === "Overhead" ? bulkNewItem.material : "",
-      material: bulkExpenseType === "Client" ? bulkNewItem.material : "",
+      client: actualType === "Client" ? bulkClient : "",
+      category: actualType === "Overhead" ? bulkCategory : actualType === "Credit" ? bulkCategory : "",
+      description: actualType === "Overhead" || actualType === "Credit" ? bulkNewItem.material : "",
+      material: actualType === "Client" ? bulkNewItem.material : "",
       cost: parseFloat(bulkNewItem.cost || 0)
     }]);
     setBulkNewItem({ material: "", qty: "", cost: "" });
@@ -255,20 +258,59 @@ export default function ExpensePage() {
     return (
       <div className="page-wrapper min-h-screen font-sans flex flex-col">
         {/* ── TOP INFO BAR ── */}
-        <div className="themed-card p-2 grid grid-cols-12 gap-2 border-b border-[var(--border-color)] items-end">
+        <div className="themed-card p-2 grid grid-cols-12 gap-2 border-b border-[var(--border-color)] items-end relative z-50">
           <div className="col-span-2">
-            <label className="block text-[10px] font-bold text-muted uppercase">Expense Type</label>
+            <label className="block text-[10px] font-bold text-muted uppercase">Transaction Type</label>
             <select
-              value={bulkExpenseType}
-              onChange={(e) => setBulkExpenseType(e.target.value)}
+              value={bulkTransactionType}
+              onChange={(e) => {
+                setBulkTransactionType(e.target.value);
+                if (e.target.value === "Credit") {
+                  setBulkCategory("Bank Interest");
+                } else if (bulkExpenseType === "Overhead") {
+                  setBulkCategory(OVERHEAD_CATEGORIES[0]);
+                }
+              }}
               disabled={isClientOnlyView}
               className={`w-full themed-input border border-[var(--border-color)] px-2 py-1 text-sm outline-none focus:border-indigo-400 font-bold ${isClientOnlyView ? 'opacity-50 cursor-not-allowed' : ''}`}
             >
-              <option>Client</option>
-              {!isClientOnlyView && <option>Overhead</option>}
-              {!isClientOnlyView && <option>Credit</option>}
+              <option value="Expense">Expense</option>
+              {!isClientOnlyView && <option value="Credit">Credit</option>}
             </select>
           </div>
+
+          {bulkTransactionType === "Expense" ? (
+            <div className="col-span-2">
+              <label className="block text-[10px] font-bold text-muted uppercase">Expense Type</label>
+              <select
+                value={bulkExpenseType}
+                onChange={(e) => {
+                  setBulkExpenseType(e.target.value);
+                  if (e.target.value === "Overhead") {
+                    setBulkCategory(OVERHEAD_CATEGORIES[0]);
+                  }
+                }}
+                disabled={isClientOnlyView}
+                className={`w-full themed-input border border-[var(--border-color)] px-2 py-1 text-sm outline-none focus:border-indigo-400 font-bold ${isClientOnlyView ? 'opacity-50 cursor-not-allowed' : ''}`}
+              >
+                <option value="Client">Client</option>
+                {!isClientOnlyView && <option value="Overhead">Overhead</option>}
+              </select>
+            </div>
+          ) : (
+            <div className="col-span-2">
+              <label className="block text-[10px] font-bold text-muted uppercase">Credit Type</label>
+              <select
+                value={bulkCategory}
+                onChange={(e) => setBulkCategory(e.target.value)}
+                className="w-full themed-input border border-[var(--border-color)] px-2 py-1 text-sm outline-none focus:border-indigo-400 font-bold"
+              >
+                <option>Bank Interest</option>
+                <option>Reversal</option>
+              </select>
+            </div>
+          )}
+
           <div className="col-span-2">
             <label className="block text-[10px] font-bold text-slate-500 uppercase">Date</label>
             <input
@@ -278,32 +320,34 @@ export default function ExpensePage() {
               className="w-full themed-input border border-[var(--border-color)] px-2 py-1 text-sm outline-none focus:border-indigo-400"
             />
           </div>
-          {bulkExpenseType === "Client" ? (
-            <div className="col-span-4">
+
+          {bulkTransactionType === "Expense" && bulkExpenseType === "Client" && (
+            <div className="col-span-3">
               <label className="block text-[10px] font-bold text-slate-500 uppercase">Select Work Order *</label>
               <SearchableSelect
                 value={bulkClient}
                 onChange={(e) => setBulkClient(e.target.value)}
                 options={sites.map(site => ({ value: site.id, label: `${site.name} (Client: ${site.clientName})` }))}
-                placeholder="-- Select a Work Order --"
+                placeholder="-- Select Work Order --"
                 className="w-full themed-input border border-[var(--border-color)] px-2 py-1 text-sm outline-none focus:border-indigo-400 font-bold"
               />
             </div>
-          ) : (
-            <div className="col-span-4">
-              <label className="block text-[10px] font-bold text-slate-500 uppercase">Category</label>
+          )}
+
+          {bulkTransactionType === "Expense" && bulkExpenseType === "Overhead" && (
+            <div className="col-span-3">
+              <label className="block text-[10px] font-bold text-slate-500 uppercase">Overhead Category</label>
               <select
                 value={bulkCategory}
                 onChange={(e) => setBulkCategory(e.target.value)}
                 className="w-full themed-input border border-[var(--border-color)] px-2 py-1 text-sm outline-none focus:border-indigo-400"
               >
-                {bulkExpenseType === "Credit" 
-                  ? <option>Bank Interest</option>
-                  : OVERHEAD_CATEGORIES.map(c => <option key={c}>{c}</option>)}
+                {OVERHEAD_CATEGORIES.map(c => <option key={c}>{c}</option>)}
               </select>
             </div>
           )}
-          <div className="col-span-4 flex flex-col items-end justify-end pb-0.5">
+
+          <div className={`${bulkTransactionType === "Expense" ? "col-span-3" : "col-span-6"} flex flex-col items-end justify-end pb-0.5`}>
             <span className="text-[9px] font-bold text-indigo-400 uppercase tracking-widest">Bulk Total</span>
             <span className="text-sm font-black text-indigo-300">
               ₹{bulkItems.reduce((s, i) => s + i.cost, 0).toLocaleString()}
@@ -338,10 +382,11 @@ export default function ExpensePage() {
           <div className="col-span-3">
             <label className="block text-[10px] font-bold text-indigo-400 text-center uppercase tracking-tighter">Total Cost (₹)</label>
             <input
-              type="number"
+              type="text"
+              inputMode="decimal" pattern="^\d*\.?\d*$"
               placeholder="0.00"
               value={bulkNewItem.cost}
-              onChange={(e) => setBulkNewItem({ ...bulkNewItem, cost: e.target.value })}
+              onChange={(e) => setBulkNewItem({ ...bulkNewItem, cost: e.target.value.replace(/[^0-9.]/g, '').replace(/(\..*?)\..*/g, '$1') })}
               onKeyPress={(e) => e.key === "Enter" && addBulkItem()}
               className="w-full themed-input border border-[var(--border-color)] px-2 py-1 text-sm text-right outline-none focus:border-indigo-400 font-bold"
             />
@@ -408,13 +453,13 @@ export default function ExpensePage() {
                 onConfirm: () => setBulkItems([])
               });
             }}
-            className="bg-orange-500 hover:bg-orange-600 text-white px-4 py-1.5 rounded flex items-center gap-2 text-xs font-bold transition shadow-sm"
+            className="bg-[#D4AF37] hover:bg-[#c4a133] text-white px-4 py-1.5 rounded flex items-center gap-2 text-xs font-bold transition shadow-sm"
           >
             <RotateCcw size={14} /> Clear List
           </button>
           <button
             onClick={saveBulkExpenses}
-            className="bg-indigo-600 hover:bg-indigo-700 text-white px-8 py-1.5 rounded flex items-center gap-2 text-xs font-bold transition shadow-sm"
+            className="btn-accent px-8 py-1.5 rounded flex items-center gap-2 text-xs font-bold transition shadow-sm"
           >
             <Save size={14} /> Save All Expenses
           </button>
@@ -429,7 +474,7 @@ export default function ExpensePage() {
       <div className="flex justify-between items-center mb-5">
         <div>
           <h1 className="text-xl font-black text-themed flex items-center gap-2">
-            <Receipt className="text-indigo-500" size={18} />
+            <Receipt className="text-[var(--accent)]" size={18} />
             {isClientOnlyView ? `Project Expenses: ${location.state.autoFill?.name}` : 'Expenses Management'}
           </h1>
           <p className="text-muted text-xs mt-0.5 font-medium">
@@ -446,7 +491,7 @@ export default function ExpensePage() {
                 onClick={() => setViewType(type)}
                 className={`px-4 py-2 rounded-lg text-sm font-bold transition ${
                   viewType === type
-                    ? "bg-indigo-600 text-white shadow-md"
+                    ? "btn-accent shadow-md"
                     : "text-muted hover:text-themed"
                 }`}
               >
@@ -456,7 +501,7 @@ export default function ExpensePage() {
           </div>
           <button
             onClick={() => setUiMode("Bulk")}
-            className="bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 hover:bg-indigo-500/20 h-11 px-6 rounded-xl font-bold flex items-center gap-2 transition-all shadow-sm active:scale-95"
+            className="bg-[var(--accent)]/10 text-[var(--accent)] border border-[var(--accent)]/20 hover:bg-[var(--accent)]/20 h-11 px-6 rounded-xl font-bold flex items-center gap-2 transition-all shadow-sm active:scale-95"
           >
             <ListPlus size={18} /> Bulk Entry
           </button>
@@ -474,7 +519,7 @@ export default function ExpensePage() {
               setNewExpense({ ...newExpense, expenseType: "Client" });
               setIsModalOpen(true);
             }}
-            className="bg-indigo-600 hover:bg-indigo-700 text-white h-11 px-6 rounded-xl font-bold flex items-center gap-2 transition-all shadow-lg active:scale-95"
+            className="btn-accent h-11 px-6 rounded-xl font-bold flex items-center gap-2 transition-all shadow-lg active:scale-95"
           >
             <Plus size={18} /> Log Expense
           </button>
@@ -501,14 +546,14 @@ export default function ExpensePage() {
             <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">
               Client Expenses
             </p>
-            <h2 className="text-xl font-black text-indigo-600">
+            <h2 className="text-xl font-black text-[var(--accent)]">
               ₹{totalClientCost.toLocaleString()}
             </h2>
             <p className="text-[10px] text-slate-400 mt-1 font-medium">
               Materials &amp; procurement {isClientOnlyView && `for ${location.state.autoFill?.name}`}
             </p>
           </div>
-          <div className="p-3 bg-indigo-500/10 rounded-2xl text-indigo-400 border border-indigo-500/20">
+          <div className="p-3 bg-[var(--accent)]/10 rounded-2xl text-[var(--accent)] border border-[var(--accent)]/20">
             <User size={20} />
           </div>
         </div>
@@ -546,10 +591,10 @@ export default function ExpensePage() {
                 className={`px-5 py-2 rounded-lg text-xs font-black uppercase tracking-wider transition-all ${
                   activeTab === tab
                     ? tab === "Client"
-                      ? "bg-indigo-600 text-white shadow"
+                      ? "btn-accent shadow"
                       : tab === "Overhead"
                       ? "bg-amber-500 text-white shadow"
-                      : "bg-indigo-600 text-white shadow"
+                      : "btn-accent shadow"
                     : "text-muted hover:text-themed"
                 }`}
               >
@@ -596,7 +641,7 @@ export default function ExpensePage() {
                     <span
                       className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider ${
                         expense.expenseType === "Client"
-                          ? "bg-indigo-500/10 text-indigo-400 border border-indigo-500/20"
+                          ? "bg-[var(--accent)]/10 text-[var(--accent)] border border-[var(--accent)]/20"
                           : "bg-amber-500/10 text-amber-400 border border-amber-500/20"
                       }`}
                     >
@@ -624,7 +669,7 @@ export default function ExpensePage() {
                   </td>
                   <td className="px-8 py-5">
                     {expense.expenseType === "Client" ? (
-                      <span className="text-indigo-400 font-black text-xs uppercase tracking-wide">
+                      <span className="text-[var(--accent)] font-black text-xs uppercase tracking-wide">
                         {sites.find(s => s.id.toString() === expense.client?.toString())?.name || expense.client}
                       </span>
                     ) : (
@@ -660,7 +705,7 @@ export default function ExpensePage() {
           <div className="border-t border-[var(--border-color)] px-8 py-4 bg-[var(--bg-surface)] flex justify-end">
             <div className="text-sm font-black text-themed">
               Showing {searchFiltered.length} entries &nbsp;|&nbsp; Total:{" "}
-              <span className="text-indigo-400 text-base">
+              <span className="text-[var(--accent)] text-base">
                 ₹
                 {searchFiltered
                   .reduce((s, e) => s + e.cost, 0)
@@ -708,7 +753,7 @@ export default function ExpensePage() {
                   className={`flex-1 py-3 rounded-xl font-black text-sm uppercase tracking-wide transition-all flex items-center justify-center gap-2 ${
                     newExpense.expenseType === type
                       ? type === "Client"
-                        ? "bg-indigo-600 text-white shadow-lg"
+                        ? "btn-accent shadow-lg"
                         : "bg-amber-500 text-white shadow-lg"
                       : "text-muted hover:text-themed"
                   }`}
@@ -800,14 +845,15 @@ export default function ExpensePage() {
                       </label>
                       <input
                         required
-                        type="number"
+                        type="text"
+                        inputMode="decimal" pattern="^\d*\.?\d*$"
                         placeholder="0.00"
                         className="w-full p-4 themed-input border border-[var(--border-color)] rounded-2xl outline-none focus:border-indigo-500 font-bold text-sm transition"
                         value={newExpense.cost}
                         onChange={(e) =>
                           setNewExpense({
                             ...newExpense,
-                            cost: e.target.value,
+                            cost: e.target.value.replace(/[^0-9.]/g, '').replace(/(\..*?)\..*/g, '$1'),
                           })
                         }
                       />
@@ -831,11 +877,16 @@ export default function ExpensePage() {
                           })
                         }
                       >
-                        {newExpense.expenseType === "Credit" 
-                          ? <option>Bank Interest</option>
-                          : OVERHEAD_CATEGORIES.map((c) => (
-                          <option key={c}>{c}</option>
-                        ))}
+                        {newExpense.expenseType === "Credit" ? (
+                          <>
+                            <option>Bank Interest</option>
+                            <option>Reversal</option>
+                          </>
+                        ) : (
+                          OVERHEAD_CATEGORIES.map((c) => (
+                            <option key={c}>{c}</option>
+                          ))
+                        )}
                       </select>
                     </div>
                     <div>
@@ -879,12 +930,13 @@ export default function ExpensePage() {
                     </label>
                     <input
                       required
-                      type="number"
+                      type="text"
+                      inputMode="decimal" pattern="^\d*\.?\d*$"
                       placeholder="0.00"
                       className="w-full p-4 themed-input border border-[var(--border-color)] rounded-2xl outline-none focus:border-amber-500 font-bold text-sm transition"
                       value={newExpense.cost}
                       onChange={(e) =>
-                        setNewExpense({ ...newExpense, cost: e.target.value })
+                        setNewExpense({ ...newExpense, cost: e.target.value.replace(/[^0-9.]/g, '').replace(/(\..*?)\..*/g, '$1') })
                       }
                     />
                   </div>
@@ -895,11 +947,11 @@ export default function ExpensePage() {
                 type="submit"
                 className={`w-full text-white py-5 rounded-[25px] font-black text-sm uppercase tracking-[0.2em] mt-4 shadow-xl transition-all active:scale-95 ${
                   newExpense.expenseType === "Client"
-                    ? "bg-indigo-600 hover:bg-indigo-700"
+                    ? "btn-accent"
                     : "bg-amber-500 hover:bg-amber-600"
                 }`}
               >
-                Save {newExpense.expenseType} Expense Entry
+                Save {newExpense.expenseType} {newExpense.expenseType === "Credit" ? "Entry" : "Expense Entry"}
               </button>
             </div>
           </form>

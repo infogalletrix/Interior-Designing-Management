@@ -40,6 +40,16 @@ const EmployeesPage = () => {
     bankDetails: "",
     govId: "",
   });
+  const [isOtherRole, setIsOtherRole] = useState(false);
+
+  const STANDARD_ROLES = ["Project Manager", "Site Supervisor", "Interior Designer", "3D Visualizer", "Carpenter", "Electrician", "Plumber", "Painter", "Mason", "Helper", "Accountant", "Sales Executive"];
+
+  const handleEdit = (emp) => {
+    setFormData(emp);
+    setEditingId(emp.id);
+    setIsOtherRole(!STANDARD_ROLES.includes(emp.role) && emp.role !== "");
+    setIsModalOpen(true);
+  };
 
   useEffect(() => {
     fetch('/api/employees')
@@ -63,6 +73,33 @@ const EmployeesPage = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+
+    // Prevent duplicate mobile numbers
+    const isDuplicatePhone = employees.some(emp => emp.phone === formData.phone && emp.id !== editingId);
+    if (isDuplicatePhone) {
+      showDialog({ 
+        title: "Duplicate Record", 
+        message: `An employee with the phone number ${formData.phone} already exists.`, 
+        type: "alert" 
+      });
+      return;
+    }
+
+    // Prevent duplicate email IDs (if provided)
+    if (formData.email && formData.email.trim() !== "") {
+      const isDuplicateEmail = employees.some(emp => 
+        emp.email?.toLowerCase() === formData.email.trim().toLowerCase() && emp.id !== editingId
+      );
+      if (isDuplicateEmail) {
+        showDialog({ 
+          title: "Duplicate Record", 
+          message: `An employee with the email address ${formData.email} already exists.`, 
+          type: "alert" 
+        });
+        return;
+      }
+    }
+
     try {
       const payload = {
         ...formData,
@@ -74,7 +111,24 @@ const EmployeesPage = () => {
 
       if (editingId) {
         const empToUpdate = employees.find(e => e.id === editingId);
-        const finalPayload = { ...payload, workerId: empToUpdate.workerId };
+        const finalPayload = { 
+          ...empToUpdate, 
+          ...payload, 
+          workerId: empToUpdate.workerId || "",
+          joinDate: empToUpdate.joinDate || new Date().toISOString().split("T")[0],
+          department: empToUpdate.department || "",
+          email: payload.email || empToUpdate.email || "",
+          address: payload.address || empToUpdate.address || "",
+          bankDetails: payload.bankDetails || empToUpdate.bankDetails || "",
+          govId: payload.govId || empToUpdate.govId || ""
+        };
+        
+        // Ensure no null values are sent for strings
+        Object.keys(finalPayload).forEach(key => {
+          if (finalPayload[key] === null) {
+            finalPayload[key] = "";
+          }
+        });
         
         const res = await fetch(`/api/employees/${editingId}`, {
           method: 'PUT',
@@ -120,6 +174,7 @@ const EmployeesPage = () => {
   const closeModal = () => {
     setIsModalOpen(false);
     setEditingId(null);
+    setIsOtherRole(false);
     setFormData({
       name: "", role: "", phone: "", email: "", address: "",
       salary: "", salaryType: "Monthly", status: "Active",
@@ -182,22 +237,54 @@ const EmployeesPage = () => {
   if (selectedEmployee) {
     return (
       <div className="p-6 page-wrapper min-h-screen font-sans relative">
-        <button
-          onClick={() => setSelectedEmployee(null)}
-          className="flex items-center gap-2 text-muted hover:text-indigo-500 mb-6 font-bold text-sm transition"
-        >
-          <ArrowLeft size={16} /> Back to Staff List
-        </button>
+        <div className="flex justify-between items-center mb-6">
+          <button
+            onClick={() => setSelectedEmployee(null)}
+            className="flex items-center gap-2 text-muted hover:text-[#C9A227] font-bold text-sm transition"
+          >
+            <ArrowLeft size={16} /> Back to Staff List
+          </button>
+
+          <div className="flex gap-2">
+            <button 
+              onClick={() => { 
+                const emp = selectedEmployee;
+                setSelectedEmployee(null); 
+                handleEdit(emp); 
+              }} 
+              className="px-4 py-2 bg-[var(--bg-card)] border border-[var(--border-color)] rounded-xl text-sm font-bold text-themed hover:border-[#C9A227] hover:text-[#C9A227] transition flex items-center gap-2 shadow-sm"
+            >
+              <Edit2 size={16} /> Edit Profile
+            </button>
+            <button 
+              onClick={() => { 
+                showDialog({ 
+                  title: "Delete Employee", 
+                  message: `Are you sure you want to remove ${selectedEmployee.name} from the staff directory? This action cannot be undone.`, 
+                  type: "confirm", 
+                  onConfirm: () => { 
+                    const updated = employees.filter(e => e.id !== selectedEmployee.id); 
+                    saveToStorage(updated, selectedEmployee.id); 
+                    setSelectedEmployee(null); 
+                  } 
+                }); 
+              }} 
+              className="px-4 py-2 bg-rose-500/10 text-rose-500 rounded-xl text-sm font-bold hover:bg-rose-500/20 transition flex items-center gap-2 shadow-sm"
+            >
+              <Trash2 size={16} /> Delete
+            </button>
+          </div>
+        </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
           {/* Left Column */}
           <div className="lg:col-span-4 space-y-6">
             <div className="themed-card rounded-[32px] p-8 text-center shadow-sm">
-              <div className="w-24 h-24 bg-indigo-500/10 text-indigo-400 rounded-full flex items-center justify-center mx-auto mb-4 border-2 border-indigo-500/20 shadow-md">
+              <div className="w-24 h-24 bg-[#C9A227]/10 text-[#C9A227] rounded-full flex items-center justify-center mx-auto mb-4 border-2 border-[#C9A227]/20 shadow-md">
                 <User size={40} />
               </div>
               <h2 className="text-2xl font-black text-themed mb-1">{selectedEmployee.name}</h2>
-              <p className="text-indigo-500 font-bold text-xs tracking-widest uppercase mb-4">
+              <p className="text-[#C9A227] font-bold text-xs tracking-widest uppercase mb-4">
                 {selectedEmployee.role}
               </p>
               <div className="inline-block px-3 py-1 bg-[var(--accent-soft)] border border-[var(--border-color)] rounded-lg text-[10px] font-bold text-muted mb-4">
@@ -209,7 +296,7 @@ const EmployeesPage = () => {
                 }`}>
                   {selectedEmployee.status}
                 </span>
-                <span className="px-3 py-1 bg-blue-500/10 text-blue-400 border border-blue-500/20 rounded-full text-[10px] font-black uppercase tracking-wider">
+                <span className="px-3 py-1 bg-[var(--accent-soft)] text-muted border border-[var(--border-color)] rounded-full text-[10px] font-black uppercase tracking-wider">
                   {selectedEmployee.salaryType}
                 </span>
               </div>
@@ -217,7 +304,7 @@ const EmployeesPage = () => {
 
             <div className="themed-card rounded-[32px] p-6 shadow-sm">
               <h3 className="font-black text-themed text-sm mb-4 flex items-center gap-2">
-                <Phone size={16} className="text-indigo-500" /> Contact &amp; Details
+                <Phone size={16} className="text-[#C9A227]" /> Contact &amp; Details
               </h3>
               <div className="space-y-3">
                 <div className="flex items-start gap-3 text-muted text-sm font-medium">
@@ -263,7 +350,7 @@ const EmployeesPage = () => {
 
             <div className="themed-card rounded-[32px] overflow-hidden shadow-sm">
               <div className="p-6 px-8 border-b border-[var(--border-color)] flex items-center gap-3 font-black text-themed">
-                <CreditCard size={18} className="text-indigo-500" /> Payment History
+                <CreditCard size={18} className="text-[#C9A227]" /> Payment History
               </div>
               <div className="overflow-x-auto max-h-[300px]">
                 <table className="w-full text-left border-collapse">
@@ -314,11 +401,11 @@ const EmployeesPage = () => {
       {/* HEADER */}
       <div className="flex flex-col md:flex-row justify-between items-center mb-4 gap-3">
         <div>
-          <h1 className="text-xl font-black text-white tracking-tight flex items-center gap-2">
-            <Users className="text-indigo-600" size={18} />
+          <h1 className="text-xl font-black text-themed tracking-tight flex items-center gap-2">
+            <Users className="text-[#C9A227]" size={18} />
             Staff Directory
           </h1>
-          <p className="text-slate-400 font-medium text-xs mt-0.5">
+          <p className="text-muted font-medium text-xs mt-0.5">
             Manage employee profiles, roles, and payroll setups.
           </p>
         </div>
@@ -338,7 +425,7 @@ const EmployeesPage = () => {
           </button>
           <button
             onClick={() => setIsModalOpen(true)}
-            className="bg-indigo-600 text-white px-4 py-1.5 rounded-xl font-bold hover:bg-indigo-700 shadow-md flex items-center gap-2 transition ml-2"
+            className="bg-[#C9A227] text-white px-4 py-1.5 rounded-xl font-bold hover:bg-[#B8911F] shadow-md flex items-center gap-2 transition ml-2"
           >
             <Plus size={18} /> Add Staff
           </button>
@@ -347,10 +434,10 @@ const EmployeesPage = () => {
 
       {/* STATS */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-        <StatCard title="Total Staff" value={totalEmployees} color="text-white" icon={Users} />
+        <StatCard title="Total Staff" value={totalEmployees} color="text-themed" icon={Users} />
         <StatCard title="Active" value={activeCount} color="text-emerald-500" />
         <StatCard title="Inactive" value={inactiveCount} color="text-rose-500" />
-        <StatCard title="Monthly Payroll" value={`₹${totalMonthlyPayroll.toLocaleString()}`} color="text-indigo-600" icon={Briefcase} />
+        <StatCard title="Monthly Payroll" value={`₹${totalMonthlyPayroll.toLocaleString()}`} color="text-[#C9A227]" icon={Briefcase} />
       </div>
 
       {/* CONTROLS */}
@@ -397,13 +484,13 @@ const EmployeesPage = () => {
           <div className="flex bg-white/10 p-1 rounded-xl">
             <button
               onClick={() => setViewMode("list")}
-              className={`p-1.5 rounded-lg transition-all ${viewMode === 'list' ? 'bg-[var(--bg-card)] shadow-sm text-indigo-500' : 'text-muted hover:text-themed'}`}
+              className={`p-1.5 rounded-lg transition-all ${viewMode === 'list' ? 'bg-[var(--bg-card)] shadow-sm text-[#C9A227]' : 'text-muted hover:text-themed'}`}
             >
               <List size={16} />
             </button>
             <button
               onClick={() => setViewMode("grid")}
-              className={`p-1.5 rounded-lg transition-all ${viewMode === 'grid' ? 'bg-[var(--bg-card)] shadow-sm text-indigo-500' : 'text-muted hover:text-themed'}`}
+              className={`p-1.5 rounded-lg transition-all ${viewMode === 'grid' ? 'bg-[var(--bg-card)] shadow-sm text-[#C9A227]' : 'text-muted hover:text-themed'}`}
             >
               <LayoutGrid size={16} />
             </button>
@@ -429,7 +516,7 @@ const EmployeesPage = () => {
                 {filteredEmployees.map((emp) => (
                   <tr key={emp.id} className="group themed-row">
                     <td className="px-6 py-4">
-                      <button onClick={() => setSelectedEmployee(emp)} className="block font-black text-themed text-sm hover:text-indigo-500 transition text-left">
+                      <button onClick={() => setSelectedEmployee(emp)} className="block font-black text-themed text-sm hover:text-[#C9A227] transition text-left">
                         {emp.name}
                       </button>
                       <div className="flex items-center gap-1 text-muted text-[10px] font-bold mt-0.5">
@@ -455,8 +542,8 @@ const EmployeesPage = () => {
                     <td className="px-6 py-4 text-right">
                       <div className="flex justify-end gap-3 opacity-50 group-hover:opacity-100 transition-opacity">
                         <button
-                          onClick={() => { setFormData(emp); setEditingId(emp.id); setIsModalOpen(true); }}
-                          className="text-muted hover:text-indigo-500 transition"
+                          onClick={() => handleEdit(emp)}
+                          className="text-muted hover:text-[#C9A227] transition"
                         >
                           <Edit2 size={16} />
                         </button>
@@ -492,7 +579,7 @@ const EmployeesPage = () => {
           {filteredEmployees.map((emp) => (
             <div key={emp.id} className="themed-card rounded-[24px] p-5 shadow-sm hover:shadow-md transition flex flex-col h-full relative group">
               <div className="absolute top-4 right-4 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity bg-[var(--bg-card)] p-1 rounded-lg shadow-sm border border-[var(--border-color)]">
-                <button onClick={() => { setFormData(emp); setEditingId(emp.id); setIsModalOpen(true); }} className="text-muted hover:text-indigo-500 p-1">
+                <button onClick={() => handleEdit(emp)} className="text-muted hover:text-[#C9A227] p-1">
                   <Edit2 size={14} />
                 </button>
                 <button
@@ -510,10 +597,10 @@ const EmployeesPage = () => {
                 </button>
               </div>
               
-              <div className="w-16 h-16 bg-indigo-500/10 text-indigo-400 rounded-full flex items-center justify-center mb-4 cursor-pointer" onClick={() => setSelectedEmployee(emp)}>
+              <div className="w-16 h-16 bg-[#C9A227]/10 text-[#C9A227] rounded-full flex items-center justify-center mb-4 cursor-pointer" onClick={() => setSelectedEmployee(emp)}>
                 <User size={24} />
               </div>
-              <h3 className="font-black text-themed text-lg cursor-pointer hover:text-indigo-500 transition" onClick={() => setSelectedEmployee(emp)}>
+              <h3 className="font-black text-themed text-lg cursor-pointer hover:text-[#C9A227] transition" onClick={() => setSelectedEmployee(emp)}>
                 {emp.name}
               </h3>
               <p className="text-muted text-xs font-bold mb-3">{emp.role}</p>
@@ -567,10 +654,16 @@ const EmployeesPage = () => {
                 />
                 <input
                   required
+                  type="text"
+                  inputMode="numeric"
+                  pattern="[0-9]*"
                   placeholder="Phone Number"
                   className="w-full p-3 border-2 rounded-xl themed-input transition outline-none focus:border-indigo-500 text-sm font-bold"
                   value={formData.phone}
-                  onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                  onChange={(e) => {
+                    const onlyNums = e.target.value.replace(/\D/g, "");
+                    setFormData({ ...formData, phone: onlyNums });
+                  }}
                 />
                 <input
                   placeholder="Email Address (Optional)"
@@ -590,13 +683,39 @@ const EmployeesPage = () => {
               {/* Job & Payroll */}
               <div className="space-y-4">
                 <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest border-b border-white/10 pb-2">Job & Payroll</h3>
-                <input
-                  required
-                  placeholder="Job Role (e.g. Carpenter, Supervisor)"
-                  className="w-full p-3 border-2 rounded-xl themed-input transition outline-none focus:border-indigo-500 text-sm font-bold"
-                  value={formData.role}
-                  onChange={(e) => setFormData({ ...formData, role: e.target.value })}
-                />
+                <div className="relative">
+                  <select
+                    required={!isOtherRole}
+                    value={isOtherRole ? "Other" : formData.role}
+                    onChange={(e) => {
+                      if (e.target.value === "Other") {
+                        setIsOtherRole(true);
+                        setFormData({ ...formData, role: "" });
+                      } else {
+                        setIsOtherRole(false);
+                        setFormData({ ...formData, role: e.target.value });
+                      }
+                    }}
+                    className="w-full p-3 border-2 rounded-xl themed-input transition outline-none focus:border-indigo-500 text-sm font-bold appearance-none"
+                  >
+                    <option value="" disabled>Select Job Role</option>
+                    {STANDARD_ROLES.map(role => (
+                      <option key={role} value={role}>{role}</option>
+                    ))}
+                    <option value="Other">Other</option>
+                  </select>
+                  <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 text-muted pointer-events-none" size={16} />
+                </div>
+                {isOtherRole && (
+                  <input
+                    required
+                    autoFocus
+                    placeholder="Specify Custom Job Role"
+                    className="w-full p-3 border-2 rounded-xl themed-input transition outline-none focus:border-indigo-500 text-sm font-bold"
+                    value={formData.role}
+                    onChange={(e) => setFormData({ ...formData, role: e.target.value })}
+                  />
+                )}
                 
                 <div className="grid grid-cols-2 gap-3">
                   <div className="relative">
@@ -627,11 +746,12 @@ const EmployeesPage = () => {
                   <span className="absolute left-4 top-1/2 -translate-y-1/2 font-black text-slate-400">₹</span>
                   <input
                     required
-                    type="number"
+                    type="text"
+                    inputMode="decimal" pattern="^\d*\.?\d*$"
                     placeholder="Base Salary Amount"
                     className="w-full pl-8 p-3 border-2 themed-input rounded-xl transition outline-none border-[var(--border-color)] focus:border-indigo-500 text-sm font-bold"
                     value={formData.salary}
-                    onChange={(e) => setFormData({ ...formData, salary: e.target.value })}
+                    onChange={(e) => setFormData({ ...formData, salary: e.target.value.replace(/[^0-9.]/g, '').replace(/(\..*?)\..*/g, '$1') })}
                   />
                 </div>
               </div>
@@ -658,7 +778,7 @@ const EmployeesPage = () => {
             
             <button
               type="submit"
-              className="w-full bg-indigo-600 text-white py-4 rounded-xl font-black text-base mt-8 hover:bg-indigo-700 shadow-md transition"
+              className="w-full bg-[#C9A227] text-white py-4 rounded-xl font-black text-base mt-8 hover:bg-[#B8911F] shadow-md transition"
             >
               {editingId ? "Save Changes" : "Create Profile"}
             </button>

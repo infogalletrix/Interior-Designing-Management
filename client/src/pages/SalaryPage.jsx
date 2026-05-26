@@ -47,7 +47,12 @@ export default function SalaryPage() {
       try {
         const res = await fetch('/api/finance/payroll');
         const data = await res.json();
-        setPayrollHistory(data);
+        // Restore the full React entry state from the attendanceBreakdown JSON object
+        const restoredHistory = data.map(d => ({
+          ...d.attendanceBreakdown,
+          id: d.id || d.attendanceBreakdown?.id,
+        })).filter(d => d.type); // ensure it's a valid history item
+        setPayrollHistory(restoredHistory);
       } catch (err) { console.error(err); }
     };
     
@@ -113,13 +118,49 @@ export default function SalaryPage() {
   const totalDeductions = advanceDed + otherDed;
   const netPay = totalEarnings - totalDeductions;
 
-  const handleSelectEmployee = (emp) => {
+  const handleSelectEmployee = async (emp) => {
     setSelectedEmployee(emp);
     setActionType("Salary");
+    
+    // Automatically calculate paidDays and otHours based on attendance
+    let computedPaidDays = 30; // fallback
+    let computedOtHours = 0;
+    try {
+      const monthStr = (MONTHS.indexOf(selectedMonth) + 1).toString().padStart(2, '0');
+      const yearMonth = `${selectedYear}-${monthStr}`;
+      
+      const res = await fetch(`/api/attendance?employeeId=${emp.id}&month=${yearMonth}`);
+      if (res.ok) {
+        const attData = await res.json();
+        
+        // Total days in the selected month
+        const daysInMonth = new Date(selectedYear, MONTHS.indexOf(selectedMonth) + 1, 0).getDate();
+        
+        // Count absences (Half-Day counts as full day for salary)
+        const absentDays = attData.filter(d => d.status?.toLowerCase() === "absent").length;
+        
+        // Sum Overtime hours
+        computedOtHours = attData.reduce((sum, d) => sum + (Number(d.overtime) || 0), 0);
+        
+        if (emp.salaryType === "Daily") {
+          // For Daily wages, only count days explicitly marked as present or half-day
+          const presentDays = attData.filter(d => 
+            d.status?.toLowerCase() === "present" || d.status?.toLowerCase() === "half-day"
+          ).length;
+          computedPaidDays = presentDays;
+        } else {
+          // For Monthly wages, assume full month minus explicitly marked absences
+          computedPaidDays = daysInMonth - absentDays;
+        }
+      }
+    } catch (e) {
+      console.error("Failed to fetch attendance for paidDays calc", e);
+    }
+
     setSalForm(f => ({
       ...f,
-      paidDays: "30",
-      otHours: "",
+      paidDays: computedPaidDays.toString(),
+      otHours: computedOtHours > 0 ? computedOtHours.toString() : "",
       otRate: "",
       otherDeductions: "",
     }));
@@ -129,7 +170,7 @@ export default function SalaryPage() {
     }));
   };
 
-  const handleProcessSalary = async (e) => {
+  const handleProcessSalary = async (e, shouldPrint = true) => {
     e.preventDefault();
     if (!selectedEmployee) return;
 
@@ -138,14 +179,14 @@ export default function SalaryPage() {
         title: "Warning",
         message: `You are deducting ₹${advanceDed} for advances, but the employee's outstanding advance balance is only ₹${selectedEmployee.advanceBalance || 0}. Continue?`,
         type: "confirm",
-        onConfirm: () => executeProcessSalary()
+        onConfirm: () => executeProcessSalary(shouldPrint)
       });
       return;
     }
-    executeProcessSalary();
+    executeProcessSalary(shouldPrint);
   };
 
-  const executeProcessSalary = async () => {
+  const executeProcessSalary = async (shouldPrint) => {
     const entry = {
       id: `PR-SAL-${Date.now()}`,
       type: "Salary",
@@ -167,13 +208,28 @@ export default function SalaryPage() {
       method: salForm.method,
     };
 
+    const payload = {
+      employeeId: selectedEmployee.id,
+      month: selectedMonth,
+      year: selectedYear,
+      baseSalary: basic,
+      deductions: totalDeductions,
+      netPay,
+      paidDate: salForm.paidOn,
+      status: "Paid",
+      attendanceBreakdown: entry
+    };
+
     try {
-      await fetch('/api/finance/payroll', {
+      const res = await fetch('/api/finance/payroll', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify(entry)
+        body: JSON.stringify(payload)
       });
-      saveHistory([entry, ...payrollHistory]);
+      const data = await res.json();
+      
+      const savedEntry = { ...entry, id: data.id || entry.id };
+      saveHistory([savedEntry, ...payrollHistory]);
 
       if (advanceDed > 0) {
         const newBalance = Math.max(0, (selectedEmployee.advanceBalance || 0) - advanceDed);
@@ -191,20 +247,23 @@ export default function SalaryPage() {
         saveEmployees(updatedEmps);
       }
 
-      const pd = {
-        name: selectedEmployee.name,
-        gender: "Male",
-        paidDays: salForm.paidDays,
-        lopDays: salForm.lopDays,
-        basic: salForm.basic,
-        otHours: salForm.otHours,
-        otRate: salForm.otRate,
-        advance: salForm.advanceDeduction,
-        otherDeductions: salForm.otherDeductions,
-      };
-      setPrintData(pd);
-      setTimeout(() => handlePrint(), 300);
+      if (shouldPrint) {
+        const pd = {
+          name: selectedEmployee.name,
+          gender: "Male",
+          paidDays: salForm.paidDays,
+          lopDays: salForm.lopDays,
+          basic: salForm.basic,
+          otHours: salForm.otHours,
+          otRate: salForm.otRate,
+          advance: salForm.advanceDeduction,
+          otherDeductions: salForm.otherDeductions,
+        };
+        setPrintData(pd);
+        setTimeout(() => handlePrint(), 300);
+      }
 
+      showDialog({ title: "Success", message: `Salary of ${selectedMonth} ${selectedYear} processed successfully for ${selectedEmployee.name}.`, type: "success" });
       setSelectedEmployee(null);
     } catch(err) { console.error(err); }
   };
@@ -231,13 +290,28 @@ export default function SalaryPage() {
       method: advForm.method,
     };
 
+    const payload = {
+      employeeId: selectedEmployee.id,
+      month: selectedMonth,
+      year: selectedYear,
+      baseSalary: 0,
+      deductions: 0,
+      netPay: amt,
+      paidDate: advForm.paidOn,
+      status: "Paid",
+      attendanceBreakdown: entry
+    };
+
     try {
-      await fetch('/api/finance/payroll', {
+      const res = await fetch('/api/finance/payroll', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify(entry)
+        body: JSON.stringify(payload)
       });
-      saveHistory([entry, ...payrollHistory]);
+      const data = await res.json();
+      
+      const savedEntry = { ...entry, id: data.id || entry.id };
+      saveHistory([savedEntry, ...payrollHistory]);
 
       const newBalance = (selectedEmployee.advanceBalance || 0) + amt;
       await fetch(`/api/employees/${selectedEmployee.id}`, {
@@ -252,7 +326,7 @@ export default function SalaryPage() {
         return emp;
       });
       saveEmployees(updatedEmps);
-      showDialog({ title: "Success", message: `Advance of ₹${amt} paid to ${selectedEmployee.name}.`, type: "success" });
+      showDialog({ title: "Success", message: `Advance of ₹${amt} for ${selectedMonth} ${selectedYear} paid to ${selectedEmployee.name}.`, type: "success" });
       setSelectedEmployee(null);
     } catch(err) { console.error(err); }
   };
@@ -268,8 +342,12 @@ export default function SalaryPage() {
   const totalSalaryPaid = salaryHistory.reduce((s, p) => s + p.netPay, 0);
   const totalAdvancePaid = advanceHistory.reduce((s, p) => s + p.amount, 0);
 
-  const alreadyPaidSalary = (emp) =>
-    salaryHistory.some((p) => p.employeeId === emp.id);
+  const alreadyPaidSalary = (emp) => {
+    if (emp.salaryType === "Daily") {
+      return salaryHistory.some((p) => p.employeeId === emp.id && p.paidOn === salForm.paidOn);
+    }
+    return salaryHistory.some((p) => p.employeeId === emp.id);
+  };
 
   // PDF + WHATSAPP HELPERS
   const generatePayslipPDF = (h) => {
@@ -388,8 +466,10 @@ export default function SalaryPage() {
   const labelClass = "text-[10px] font-black text-muted uppercase tracking-widest mb-1.5 block ml-1";
 
   const filteredEmployees = employees.filter(emp =>
-    emp.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (emp.role && emp.role.toLowerCase().includes(searchTerm.toLowerCase()))
+    emp.status === "Active" && (
+      emp.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (emp.role && emp.role.toLowerCase().includes(searchTerm.toLowerCase()))
+    )
   );
 
   return (
@@ -561,20 +641,20 @@ export default function SalaryPage() {
                   >
                     {alreadyPaidSalary(selectedEmployee) && (
                       <div className="mb-3 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 p-3 rounded-xl text-xs font-bold flex items-center gap-2">
-                        <CheckCircle2 size={16}/> Salary already processed for this month.
+                        <CheckCircle2 size={16}/> Salary already processed for {selectedEmployee.salaryType === "Daily" ? "this date" : "this month"}.
                       </div>
                     )}
                     
                     <div className="grid grid-cols-2 gap-3 mb-3">
                       <div>
                         <label className={labelClass}>Paid Days</label>
-                        <input type="number" className="w-full p-2 border border-[var(--border-color)] rounded-xl themed-input outline-none focus:border-violet-500 font-bold text-sm transition" value={salForm.paidDays} onChange={(e) => setSalForm({...salForm, paidDays: e.target.value})} />
+                        <input type="text" inputMode="numeric" pattern="^\d*$" className="w-full p-2 border border-[var(--border-color)] rounded-xl themed-input outline-none focus:border-violet-500 font-bold text-sm transition" value={salForm.paidDays} onChange={(e) => setSalForm({...salForm, paidDays: e.target.value.replace(/\D/g, '')})} />
                       </div>
                       <div>
                         <label className={labelClass}>Basic (Editable)</label>
                         <div className="relative">
                           <span className="absolute left-3 top-2.5 text-slate-400 text-sm font-bold">₹</span>
-                          <input type="number" required className="w-full p-2 pl-8 border border-[var(--border-color)] rounded-xl themed-input outline-none focus:border-violet-500 font-bold text-sm transition" value={salForm.basic} onChange={(e) => setSalForm({...salForm, basic: e.target.value})} />
+                          <input type="text" inputMode="decimal" pattern="^\d*\.?\d*$" required className="w-full p-2 pl-8 border border-[var(--border-color)] rounded-xl themed-input outline-none focus:border-violet-500 font-bold text-sm transition" value={salForm.basic} onChange={(e) => setSalForm({...salForm, basic: e.target.value.replace(/[^0-9.]/g, '').replace(/(\..*?)\..*/g, '$1')})} />
                         </div>
                       </div>
                     </div>
@@ -582,10 +662,10 @@ export default function SalaryPage() {
                     <div className="themed-card p-3 rounded-2xl mb-3">
                       <p className={labelClass}>Overtime Config</p>
                       <div className="grid grid-cols-2 gap-3">
-                        <input type="number" placeholder="OT Hours" className="w-full p-2 border border-[var(--border-color)] rounded-xl themed-input outline-none focus:border-violet-500 font-bold text-sm transition" value={salForm.otHours} onChange={(e) => setSalForm({...salForm, otHours: e.target.value})} />
+                        <input type="text" inputMode="decimal" pattern="^\d*\.?\d*$" placeholder="OT Hours" className="w-full p-2 border border-[var(--border-color)] rounded-xl themed-input outline-none focus:border-violet-500 font-bold text-sm transition" value={salForm.otHours} onChange={(e) => setSalForm({...salForm, otHours: e.target.value.replace(/[^0-9.]/g, '').replace(/(\..*?)\..*/g, '$1')})} />
                         <div className="relative">
                           <span className="absolute left-3 top-2.5 text-slate-400 text-sm font-bold">₹</span>
-                          <input type="number" placeholder="OT Rate / hr" className="w-full p-2 pl-8 border border-[var(--border-color)] rounded-xl themed-input outline-none focus:border-violet-500 font-bold text-sm transition" value={salForm.otRate} onChange={(e) => setSalForm({...salForm, otRate: e.target.value})} />
+                          <input type="text" inputMode="decimal" pattern="^\d*\.?\d*$" placeholder="OT Rate / hr" className="w-full p-2 pl-8 border border-[var(--border-color)] rounded-xl themed-input outline-none focus:border-violet-500 font-bold text-sm transition" value={salForm.otRate} onChange={(e) => setSalForm({...salForm, otRate: e.target.value.replace(/[^0-9.]/g, '').replace(/(\..*?)\..*/g, '$1')})} />
                         </div>
                       </div>
                     </div>
@@ -595,14 +675,14 @@ export default function SalaryPage() {
                         <label className={labelClass}>Advance Deduct</label>
                         <div className="relative">
                           <span className="absolute left-3 top-2.5 text-slate-400 text-sm font-bold">₹</span>
-                          <input type="number" className="w-full p-2 pl-8 border border-[var(--border-color)] rounded-xl themed-input outline-none focus:border-violet-500 font-bold text-sm transition text-amber-500" value={salForm.advanceDeduction} onChange={(e) => setSalForm({...salForm, advanceDeduction: e.target.value})} />
+                          <input type="text" inputMode="decimal" pattern="^\d*\.?\d*$" className="w-full p-2 pl-8 border border-[var(--border-color)] rounded-xl themed-input outline-none focus:border-violet-500 font-bold text-sm transition text-amber-500" value={salForm.advanceDeduction} onChange={(e) => setSalForm({...salForm, advanceDeduction: e.target.value.replace(/[^0-9.]/g, '').replace(/(\..*?)\..*/g, '$1')})} />
                         </div>
                       </div>
                       <div>
                         <label className={labelClass}>Other Deduct</label>
                         <div className="relative">
                           <span className="absolute left-3 top-2.5 text-slate-400 text-sm font-bold">₹</span>
-                          <input type="number" className="w-full p-2 pl-8 border border-[var(--border-color)] rounded-xl themed-input outline-none focus:border-violet-500 font-bold text-sm transition text-red-500" value={salForm.otherDeductions} onChange={(e) => setSalForm({...salForm, otherDeductions: e.target.value})} />
+                          <input type="text" inputMode="decimal" pattern="^\d*\.?\d*$" className="w-full p-2 pl-8 border border-[var(--border-color)] rounded-xl themed-input outline-none focus:border-violet-500 font-bold text-sm transition text-red-500" value={salForm.otherDeductions} onChange={(e) => setSalForm({...salForm, otherDeductions: e.target.value.replace(/[^0-9.]/g, '').replace(/(\..*?)\..*/g, '$1')})} />
                         </div>
                       </div>
                     </div>
@@ -612,13 +692,24 @@ export default function SalaryPage() {
                         <p className="text-[10px] text-muted font-bold uppercase tracking-widest mb-1">Net Payable</p>
                         <p className="text-2xl font-black text-emerald-400 tracking-tighter">₹{netPay.toLocaleString(undefined, {minimumFractionDigits: 2})}</p>
                       </div>
-                      <motion.button 
-                        whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
-                        type="submit" disabled={alreadyPaidSalary(selectedEmployee)} 
-                        className="bg-violet-600 hover:bg-violet-500 disabled:opacity-50 disabled:cursor-not-allowed px-5 py-3 rounded-xl font-black text-xs uppercase tracking-widest flex items-center gap-2 transition shadow-[0_0_20px_rgba(139,92,246,0.3)] text-white"
-                      >
-                        <Printer size={16}/> Pay & Print
-                      </motion.button>
+                      <div className="flex gap-2 items-center">
+                        <motion.button 
+                          whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
+                          type="button" disabled={alreadyPaidSalary(selectedEmployee)} 
+                          onClick={(e) => handleProcessSalary(e, false)}
+                          className="bg-[var(--bg-card)] border border-[var(--border-color)] hover:border-violet-500 disabled:opacity-50 disabled:cursor-not-allowed px-5 py-3 rounded-xl font-black text-xs uppercase tracking-widest flex items-center gap-2 transition text-themed shadow-sm"
+                        >
+                          <CheckCircle2 size={16}/> Pay
+                        </motion.button>
+                        <motion.button 
+                          whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
+                          type="button" disabled={alreadyPaidSalary(selectedEmployee)} 
+                          onClick={(e) => handleProcessSalary(e, true)}
+                          className="bg-violet-600 hover:bg-violet-500 disabled:opacity-50 disabled:cursor-not-allowed px-5 py-3 rounded-xl font-black text-xs uppercase tracking-widest flex items-center gap-2 transition shadow-[0_0_20px_rgba(139,92,246,0.3)] text-white"
+                        >
+                          <Printer size={16}/> Pay & Print
+                        </motion.button>
+                      </div>
                     </div>
                   </motion.form>
                 )}
@@ -633,7 +724,7 @@ export default function SalaryPage() {
                       <label className={labelClass}>Advance Amount</label>
                       <div className="relative">
                         <span className="absolute left-4 top-3 text-slate-400 text-base font-bold">₹</span>
-                        <input type="number" required className="w-full p-2.5 pl-9 text-base border border-[var(--border-color)] rounded-xl themed-input outline-none focus:border-violet-500 font-bold transition text-amber-500" value={advForm.amount} onChange={(e) => setAdvForm({...advForm, amount: e.target.value})} placeholder="0.00" />
+                        <input type="text" inputMode="decimal" pattern="^\d*\.?\d*$" required className="w-full p-2.5 pl-9 text-base border border-[var(--border-color)] rounded-xl themed-input outline-none focus:border-violet-500 font-bold transition text-amber-500" value={advForm.amount} onChange={(e) => setAdvForm({...advForm, amount: e.target.value.replace(/[^0-9.]/g, '').replace(/(\..*?)\..*/g, '$1')})} placeholder="0.00" />
                       </div>
                     </div>
                     <div className="grid grid-cols-2 gap-3 mb-4">

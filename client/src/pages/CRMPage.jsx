@@ -16,8 +16,8 @@ function Modal({ open, onClose, children, size = "max-w-lg" }) {
   if (!open) return null;
   return (
     <AnimatePresence>
-      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 overflow-y-auto pt-20 pb-20">
-        <motion.div initial={{ scale: 0.95, y: 20 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.95, y: 20 }} className={`themed-modal rounded-[2rem] shadow-2xl p-8 w-full ${size} relative my-auto`}>
+      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+        <motion.div initial={{ scale: 0.95, y: 20 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.95, y: 20 }} className={`themed-modal rounded-[2rem] shadow-2xl p-8 w-full ${size} relative max-h-[90vh] overflow-y-auto custom-scrollbar`}>
           <button onClick={onClose} className="absolute top-5 right-5 text-slate-400 hover:text-red-400 text-3xl leading-none transition-colors">&times;</button>
           {children}
         </motion.div>
@@ -28,7 +28,7 @@ function Modal({ open, onClose, children, size = "max-w-lg" }) {
 
 const CRMPage = () => {
   const { showDialog } = useDialog();
-  const [activeTab, setActiveTab] = useState("deals");
+  const [activeTab, setActiveTab] = useState("contacts");
   const [searchTerm, setSearchTerm] = useState("");
 
   const [contacts, setContacts] = useState([]);
@@ -147,6 +147,34 @@ const CRMPage = () => {
     });
   };
 
+  const deleteContact = (id) => {
+    showDialog({
+      title: "Delete Client",
+      message: "Are you sure you want to delete this client profile? Associated data might be affected.",
+      type: "confirm",
+      onConfirm: async () => {
+        try {
+          await fetch(`/api/crm/${id}`, { method: 'DELETE' });
+          loadData(); showFeedback("Client profile deleted");
+        } catch(err) { showFeedback("Error deleting client"); }
+      }
+    });
+  };
+
+  const deleteDeal = (id) => {
+    showDialog({
+      title: "Delete Deal",
+      message: "Are you sure you want to delete this deal? Quotations linked to this deal will also be removed.",
+      type: "confirm",
+      onConfirm: async () => {
+        try {
+          await fetch(`/api/crm/deals/${id}`, { method: 'DELETE' });
+          loadData(); showFeedback("Deal deleted successfully");
+        } catch(err) { showFeedback("Error deleting deal"); }
+      }
+    });
+  };
+
   // --- ADVANCED METRICS (Removed Probability Weighted) ---
   const { totalValue, wonValue, activeCount } = useMemo(() => {
     let t = 0, won = 0, count = 0;
@@ -217,37 +245,36 @@ const CRMPage = () => {
       </div>
 
       {/* HEADER & TABS */}
-      <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center mb-4 gap-3">
-        <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }}>
-          <h1 className="text-xl font-black text-themed tracking-tight flex items-center gap-2">
-            <span className="dark:bg-violet-600 bg-orange-500 text-white px-2 py-0.5 rounded-lg text-sm shadow-sm">M</span>
-            Mona Studio CRM
-          </h1>
-          <p className="text-muted mt-0.5 text-xs font-medium">Elevated pipeline, client management, and analytics.</p>
-        </motion.div>
+      <div className="flex flex-col mb-4 gap-3">
+        <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="flex flex-col lg:flex-row items-center justify-between gap-3 w-full">
+          
+          {/* TABS (Left) */}
+          <div className="flex w-full md:w-auto gap-1 p-1 rounded-xl border border-[var(--border-color)] themed-card shadow-sm overflow-x-auto order-2 lg:order-1">
+            {[
+              { id: "contacts", label: "Clients", icon: <User size={14} /> },
+              { id: "deals", label: "Pipeline", icon: <Briefcase size={14} /> },
+              { id: "activities", label: "Schedule", icon: <Calendar size={14} /> },
+              { id: "insights", label: "Insights", icon: <BarChart2 size={14} /> },
+            ].map((tab) => (
+              <button key={tab.id} onClick={() => { setActiveTab(tab.id); setSearchTerm(""); }} className={`flex-shrink-0 flex items-center justify-center gap-1.5 px-4 py-2 rounded-lg text-sm font-bold transition-all duration-300 ${activeTab === tab.id ? "dark:bg-violet-600 bg-[#D4AF37] text-white shadow-md" : "text-muted hover:text-themed hover:bg-[var(--bg-card-hover)]"}`}>
+                {tab.icon} <span className="hidden sm:inline">{tab.label}</span>
+              </button>
+            ))}
+          </div>
 
-        <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="flex flex-col md:flex-row items-center gap-3 w-full xl:w-auto">
-          <div className="relative w-full md:w-64 group shadow-sm rounded-xl">
+          {/* SEARCH BAR (Middle) */}
+          <div className="relative w-full lg:w-96 group shadow-sm rounded-xl order-1 lg:order-2 flex-1 max-w-xl">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted group-focus-within:text-themed transition-colors" size={16} />
             <input type="text" placeholder={`Search ${activeTab}...`} className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-[var(--border-color)] themed-input text-sm focus:ring-2 focus:ring-violet-500 outline-none transition-all" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
           </div>
 
-          <div className="flex w-full md:w-auto gap-1 p-1 rounded-xl border border-[var(--border-color)] themed-card shadow-sm overflow-x-auto">
-            {[
-              { id: "deals", label: "Pipeline", icon: <Briefcase size={14} /> },
-              { id: "contacts", label: "Clients", icon: <User size={14} /> },
-              { id: "activities", label: "Schedule", icon: <Calendar size={14} /> },
-              { id: "insights", label: "Insights", icon: <BarChart2 size={14} /> },
-            ].map((tab) => (
-              <button key={tab.id} onClick={() => { setActiveTab(tab.id); setSearchTerm(""); }} className={`flex-shrink-0 flex items-center justify-center gap-1.5 px-4 py-2 rounded-lg text-sm font-bold transition-all duration-300 ${activeTab === tab.id ? "dark:bg-violet-600 bg-orange-500 text-white shadow-md" : "text-muted hover:text-themed hover:bg-[var(--bg-card-hover)]"}`}>
-                {tab.icon} <span className="hidden sm:inline">{tab.label}</span>
-              </button>
-            ))}
-            <div className="w-px bg-[var(--border-color)] mx-1 hidden md:block"></div>
-            <button onClick={() => { if (activeTab === "contacts") setEditContact({ status: 'Cold', tags: [] }); else if (activeTab === "deals") setEditDeal({ value: 0, contactId: contacts[0]?.id || '' }); else setEditActivity({ type: '', date: new Date().toISOString().split('T')[0], client: contacts[0]?.id || '', status: 'Pending' }); }} className="flex-shrink-0 flex items-center justify-center gap-1.5 px-4 py-2 rounded-lg text-sm font-bold transition-all duration-300 themed-card text-muted dark:hover:bg-violet-600/30 hover:bg-orange-500/20 dark:hover:text-violet-500 hover:text-orange-600 border border-[var(--border-color)]">
-              <Plus size={14} /> <span className="hidden sm:inline">Add New</span>
+          {/* ADD BUTTON (Right) */}
+          <div className="flex w-full md:w-auto order-3">
+            <button onClick={() => { if (activeTab === "contacts") setEditContact({ status: 'Cold', tags: [] }); else if (activeTab === "deals") setEditDeal({ value: 0, contactId: contacts[0]?.id || '' }); else setEditActivity({ type: '', date: new Date().toISOString().split('T')[0], client: contacts[0]?.id || '', status: 'Pending' }); }} className="w-full md:w-auto flex-shrink-0 flex items-center justify-center gap-1.5 px-6 py-2.5 rounded-xl text-sm font-black transition-all duration-300 dark:bg-violet-700 bg-[#D4AF37] text-white shadow-lg dark:hover:bg-slate-800 hover:bg-[#c4a133]">
+              <Plus size={16} /> <span className="hidden sm:inline">Add New</span>
             </button>
           </div>
+
         </motion.div>
       </div>
 
@@ -256,9 +283,9 @@ const CRMPage = () => {
         
         {/* SECTION: DEALS (KANBAN) */}
         {activeTab === "deals" && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="p-4 sm:p-5 overflow-hidden w-full">
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="p-4 sm:p-5 overflow-x-auto w-full">
             <DragDropContext onDragEnd={onDragEnd}>
-              <div className="flex flex-row gap-2 sm:gap-3 w-full">
+              <div className="flex flex-row gap-2 sm:gap-3 w-full min-w-[1200px]">
                 {Object.values(pipeline).map((column) => (
                   <div key={column.id} className="flex-1 min-w-0 flex flex-col themed-card rounded-[1.25rem] p-2 sm:p-3">
                     <div className="flex flex-col xl:flex-row xl:items-center justify-between mb-3 gap-1">
@@ -279,7 +306,7 @@ const CRMPage = () => {
                                       <h4 className="font-black text-themed text-xs sm:text-sm leading-snug truncate">{deal.title}</h4>
                                     </div>
                                     <div className="flex items-center gap-2 mb-3">
-                                      <div className="w-5 h-5 rounded-md dark:bg-violet-600 bg-orange-500 flex items-center justify-center text-[9px] font-bold text-white flex-shrink-0">{contact?.name.charAt(0) || '?'}</div>
+                                      <div className="w-5 h-5 rounded-md dark:bg-violet-600 bg-[#D4AF37] flex items-center justify-center text-[9px] font-bold text-white flex-shrink-0">{contact?.name.charAt(0) || '?'}</div>
                                       <p className="text-[10px] sm:text-[11px] font-bold text-slate-400 truncate">{contact?.name || 'Unknown'}</p>
                                     </div>
                                     <div className="flex items-center gap-1.5 text-[10px] sm:text-[11px] font-bold text-slate-400 mb-4">
@@ -289,7 +316,10 @@ const CRMPage = () => {
                                     
                                     <div className="pt-2 border-t border-[var(--border-color)] flex justify-between items-center">
                                       <span className="flex items-center gap-1 text-[9px] sm:text-[10px] font-bold text-slate-500 truncate"><Clock size={10} /> {new Date(deal.closeDate).toLocaleDateString('en-GB', {day:'numeric', month:'short'})}</span>
-                                      <button className="text-[9px] sm:text-[10px] font-bold text-muted hover:text-themed px-2 py-1 themed-card rounded-md transition-colors hover:bg-violet-600/30" onClick={() => setEditDeal({ ...deal })}>Edit</button>
+                                      <div className="flex gap-1">
+                                        <button className="text-[9px] sm:text-[10px] font-bold text-muted hover:text-themed px-2 py-1 themed-card rounded-md transition-colors hover:bg-violet-600/30" onClick={() => setEditDeal({ ...deal })}>Edit</button>
+                                        <button className="text-[9px] sm:text-[10px] font-bold text-red-400 hover:text-red-300 px-1.5 py-1 themed-card rounded-md transition-colors hover:bg-red-500/20" onClick={() => deleteDeal(deal.id)}><Trash2 size={12}/></button>
+                                      </div>
                                     </div>
                                   </div>
                                 )}
@@ -321,7 +351,6 @@ const CRMPage = () => {
                   <th className="p-5">Project Focus</th>
                   <th className="p-5">Tags / Source</th>
                   <th className="p-5">Contact Details</th>
-                  <th className="p-5 text-center">Status</th>
                   <th className="p-5 pr-8 text-right">Actions</th>
                 </tr>
               </thead>
@@ -350,13 +379,11 @@ const CRMPage = () => {
                       <div className="flex items-center gap-2"><Phone size={12} className="text-slate-500" /> {c.phone}</div>
                       <div className="flex items-center gap-2"><Mail size={12} className="text-slate-500" /> {c.email || 'N/A'}</div>
                     </td>
-                    <td className="p-5 text-center">
-                      <span className={`px-2.5 py-1 rounded-md text-[10px] font-black uppercase tracking-widest border ${c.status === 'Hot' ? 'bg-orange-500/10 text-orange-400 border-orange-500/20' : c.status === 'Warm' ? 'bg-amber-500/10 text-amber-400 border-amber-500/20' : 'bg-blue-500/10 text-blue-400 border-blue-500/20'}`}>
-                        {c.status || 'Cold'}
-                      </span>
-                    </td>
                     <td className="p-5 pr-8 text-right">
-                      <button className="text-slate-400 hover:text-white font-bold px-3 py-1.5 rounded-lg hover:bg-white/10 transition-colors text-xs" onClick={() => setEditContact(c)}>Edit</button>
+                      <div className="flex justify-end items-center gap-2">
+                        <button className="text-slate-400 hover:text-white font-bold px-3 py-1.5 rounded-lg hover:bg-white/10 transition-colors text-xs" onClick={() => setEditContact(c)}>Edit</button>
+                        <button className="text-red-400 hover:text-red-300 font-bold px-2 py-1.5 rounded-lg bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 transition-colors text-xs" onClick={() => deleteContact(c.id)}><Trash2 size={14}/></button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -465,7 +492,7 @@ const CRMPage = () => {
                           <span>₹{(totalVal/100000).toFixed(2)}L</span>
                         </div>
                         <div className="h-4 w-full bg-[var(--border-color)] rounded-full overflow-hidden">
-                          <div className="h-full dark:bg-violet-500 bg-orange-500 rounded-full" style={{ width: `${percentage}%` }} />
+                          <div className="h-full dark:bg-violet-500 bg-[#D4AF37] rounded-full" style={{ width: `${percentage}%` }} />
                         </div>
                       </div>
                     );
@@ -491,7 +518,7 @@ const CRMPage = () => {
                   </div>
                 </div>
 
-                <div className="dark:bg-violet-700 bg-orange-500 rounded-[2rem] p-6 text-white shadow-xl relative overflow-hidden">
+                <div className="dark:bg-violet-700 bg-[#D4AF37] rounded-[2rem] p-6 text-white shadow-xl relative overflow-hidden">
                   <div className="absolute -right-4 -bottom-4 opacity-10"><Activity size={100} /></div>
                   <h3 className="text-sm font-black dark:text-violet-300 text-orange-100 mb-2 uppercase tracking-widest">Win Rate</h3>
                   <div className="text-4xl font-black text-white">
@@ -584,7 +611,7 @@ function EditContactForm({ contact, onSave, onCancel }) {
 
       <div className="flex gap-3 justify-end mt-6 pt-5 border-t border-[var(--border-color)]">
         <button type="button" onClick={onCancel} className="px-5 py-2.5 rounded-xl text-sm font-bold text-slate-400 hover:bg-white/5 transition-colors">Cancel</button>
-        <button type="submit" className="px-5 py-2.5 rounded-xl text-sm font-bold dark:bg-violet-700 bg-orange-500 text-white shadow-md dark:hover:bg-slate-800 hover:bg-orange-600 transition-all">Save Profile</button>
+        <button type="submit" className="px-5 py-2.5 rounded-xl text-sm font-bold dark:bg-violet-700 bg-[#D4AF37] text-white shadow-md dark:hover:bg-slate-800 hover:bg-[#c4a133] transition-all">Save Profile</button>
       </div>
     </form>
   );
@@ -639,14 +666,14 @@ function EditDealForm({ deal, contacts, onSave, onCancel }) {
           <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1.5 block">Est. Value (₹)</label>
           <div className="relative">
             <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 font-bold">₹</span>
-            <input className="w-full bg-black/20 border border-white/10 rounded-xl p-3 pl-9 text-sm text-white font-black focus:ring-2 focus:ring-stone-900 outline-none transition-all" value={form.value} onChange={e => setForm({ ...form, value: Number(e.target.value) })} type="number" required min="0" />
+            <input className="w-full bg-black/20 border border-white/10 rounded-xl p-3 pl-9 text-sm text-white font-black focus:ring-2 focus:ring-stone-900 outline-none transition-all" value={form.value} onChange={e => setForm({ ...form, value: e.target.value.replace(/[^0-9.]/g, '').replace(/(\..*?)\..*/g, '$1') })} type="text" inputMode="decimal" pattern="^\d*\.?\d*$" required min="0" />
           </div>
         </div>
       </div>
 
       <div className="flex gap-3 justify-end mt-6 pt-5 border-t border-[var(--border-color)]">
         <button type="button" onClick={onCancel} className="px-5 py-2.5 rounded-xl text-sm font-bold text-slate-400 hover:bg-white/5 transition-colors">Cancel</button>
-        <button type="submit" className="px-5 py-2.5 rounded-xl text-sm font-bold dark:bg-violet-700 bg-orange-500 text-white shadow-md dark:hover:bg-slate-800 hover:bg-orange-600 transition-all">Save Project</button>
+        <button type="submit" className="px-5 py-2.5 rounded-xl text-sm font-bold dark:bg-violet-700 bg-[#D4AF37] text-white shadow-md dark:hover:bg-slate-800 hover:bg-[#c4a133] transition-all">Save Project</button>
       </div>
     </form>
   );
@@ -718,7 +745,7 @@ function EditActivityForm({ activity, contacts, onSave, onCancel }) {
 
       <div className="flex gap-3 justify-end mt-6 pt-5 border-t border-[var(--border-color)]">
         <button type="button" onClick={onCancel} className="px-5 py-2.5 rounded-xl text-sm font-bold text-slate-400 hover:bg-white/5 transition-colors">Cancel</button>
-        <button type="submit" className="px-5 py-2.5 rounded-xl text-sm font-bold dark:bg-violet-700 bg-orange-500 text-white shadow-md dark:hover:bg-slate-800 hover:bg-orange-600 transition-all">Save Schedule</button>
+        <button type="submit" className="px-5 py-2.5 rounded-xl text-sm font-bold dark:bg-violet-700 bg-[#D4AF37] text-white shadow-md dark:hover:bg-slate-800 hover:bg-[#c4a133] transition-all">Save Schedule</button>
       </div>
     </form>
   );

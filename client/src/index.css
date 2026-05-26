@@ -6,35 +6,35 @@
    DESIGN TOKENS — Light (default) & Dark
 ════════════════════════════════════════════════════ */
 :root {
-  /* Light: Warm Cream / Amber */
-  --bg:               #fdf8f0;
-  --bg-surface:       #fff8ed;
-  --bg-card:          #ffffff;
-  --bg-card-hover:    #fffdf9;
-  --border-color:     rgba(203,185,155,0.4);
-  --text-primary:     #1c1009;
-  --text-secondary:   #78350f;
-  --text-muted:       #a16207;
-  --accent:           #f97316;
-  --accent-hover:     #ea6c0b;
-  --accent-soft:      #fed7aa;
-  --accent-glow:      rgba(249,115,22,0.2);
-  --input-bg:         #ffffff;
-  --input-focus:      #f97316;
-  --thead-bg:         #fff8ed;
-  --row-hover:        #fffdf9;
-  --divider:          rgba(203,185,155,0.25);
-  --scrollbar-thumb:  #fbbf24;
-  --orb1:             rgba(251,191,36,0.12);
-  --orb2:             rgba(249,115,22,0.08);
-  --modal-bg:         #ffffff;
-  --modal-overlay:    rgba(120,53,15,0.25);
-  --sidebar-bg:       #fff8ed;
-  --sidebar-border:   rgba(203,185,155,0.4);
-  --badge-success-bg: #d1fae5; --badge-success-text: #065f46;
-  --badge-warn-bg:    #fef9c3; --badge-warn-text:    #854d0e;
-  --badge-danger-bg:  #fee2e2; --badge-danger-text:  #991b1b;
-  --badge-neutral-bg: #f3f4f6; --badge-neutral-text: #374151;
+  /* Light: ManForce ERP — crisp white / navy / gold */
+  --bg:               #F4F5F7;
+  --bg-surface:       #EAECF0;
+  --bg-card:          #FFFFFF;
+  --bg-card-hover:    #F9FAFB;
+  --border-color:     #E1E4E8;
+  --text-primary:     #1C2B4B;
+  --text-secondary:   #3D5A8A;
+  --text-muted:       #6B7C99;
+  --accent:           #C9A227;
+  --accent-hover:     #B8911F;
+  --accent-soft:      #FDF3D0;
+  --accent-glow:      rgba(201,162,39,0.18);
+  --input-bg:         #FFFFFF;
+  --input-focus:      #C9A227;
+  --thead-bg:         #F4F5F7;
+  --row-hover:        #F9FAFB;
+  --divider:          #E1E4E8;
+  --scrollbar-thumb:  #C9A227;
+  --orb1:             transparent;
+  --orb2:             transparent;
+  --modal-bg:         #FFFFFF;
+  --modal-overlay:    rgba(28,43,75,0.35);
+  --sidebar-bg:       #111827;
+  --sidebar-border:   #1F2937;
+  --badge-success-bg: #DCFCE7; --badge-success-text: #166534;
+  --badge-warn-bg:    #FEF9C3; --badge-warn-text:    #854d0e;
+  --badge-danger-bg:  #FEE2E2; --badge-danger-text:  #991b1b;
+  --badge-neutral-bg: #F1F5F9; --badge-neutral-text: #475569;
 }
 
 html.dark {
@@ -73,17 +73,24 @@ html.dark {
    BASE
 ════════════════════════════════════════════════════ */
 @layer base {
+  html {
+    font-size: 13px;
+    font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+  }
   body {
     background-color: var(--bg);
     color: var(--text-primary);
-    @apply font-sans antialiased;
+    font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+    font-size: 13px;
+    line-height: 1.5;
+    @apply antialiased;
     transition: background-color 0.3s ease, color 0.3s ease;
   }
   * {
     scrollbar-color: var(--scrollbar-thumb) transparent;
     scrollbar-width: thin;
   }
-  *::-webkit-scrollbar { width: 6px; height: 6px; }
+  *::-webkit-scrollbar { width: 5px; height: 5px; }
   *::-webkit-scrollbar-track { background: transparent; }
   *::-webkit-scrollbar-thumb { background: var(--scrollbar-thumb); border-radius: 8px; }
   input[type="date"], input[type="time"] { color-scheme: dark; }
@@ -103,7 +110,7 @@ html.dark {
   min-height: 100vh;
   position: relative;
   overflow: hidden;
-  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
   transition: background-color 0.3s ease;
 }
 

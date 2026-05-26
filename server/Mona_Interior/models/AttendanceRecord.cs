@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
 
 namespace Mona_Interior.models
 {
@@ -13,5 +14,8 @@ namespace Mona_Interior.models
 
         // "Present" | "Absent" | "Half-Day" | "Leave"
         public string Status { get; set; } = "Present";
+
+        [Column(TypeName = "decimal(18,2)")]
+        public decimal Overtime { get; set; }
     }
 }

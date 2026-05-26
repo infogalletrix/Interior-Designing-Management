@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from "react";
 import { useReactToPrint } from "react-to-print";
 import { useLocation } from "react-router-dom";
-import { Receipt, Printer, History, User, Calendar, IndianRupee, Trash2, Save, ArrowLeft, Building, X, CheckCircle2 } from "lucide-react";
+import { Receipt, Printer, History, User, Calendar, IndianRupee, Trash2, Save, ArrowLeft, Building, X, CheckCircle2, Search, MapPin } from "lucide-react";
 import { useDialog } from "../contexts/DialogContext";
 import SearchableSelect from "../components/SearchableSelect";
 
@@ -12,13 +12,16 @@ export default function ReceiptPage() {
   const [historyFilter, setHistoryFilter] = useState("All");
   const [sites, setSites] = useState([]);
   
+  const [searchTerm, setSearchTerm] = useState("");
+  const [historySearchTerm, setHistorySearchTerm] = useState("");
+  const [selectedSiteId, setSelectedSiteId] = useState(null);
+
   // Modal states
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [generateAction, setGenerateAction] = useState(null); // 'generate' or 'print'
-  const [paymentStatus, setPaymentStatus] = useState("Complete");
-  const [partialAmount, setPartialAmount] = useState("");
 
   const [receipts, setReceipts] = useState([]);
+  const [selectedReceipts, setSelectedReceipts] = useState([]);
 
   const getNewReceiptNumber = () => {
     const lastNum = localStorage.getItem("lastReceiptNumber") || "1000";
@@ -39,7 +42,7 @@ export default function ReceiptPage() {
     paymentMode: "Cash"
   });
 
-  const [printData, setPrintData] = useState(null);
+  const [printData, setPrintData] = useState([]);
 
   useEffect(() => {
     const fetchSites = async () => {
@@ -79,35 +82,38 @@ export default function ReceiptPage() {
 
   useEffect(() => {
     if (location.state?.autoFill) {
-      const { name, desc, siteId, organizationName } = location.state.autoFill;
+      const { name, desc, siteId, organizationName, amountPaid, category } = location.state.autoFill;
+      if(siteId) setSelectedSiteId(parseInt(siteId));
       setFormData(prev => ({ 
         ...prev, 
         siteId: siteId || "",
         clientName: organizationName || name || "", 
-        description: desc || ""
+        description: desc || "",
+        totalAmount: amountPaid ? amountPaid.toString() : prev.totalAmount,
+        category: category || prev.category
       }));
       setShowHistory(false);
     }
   }, [location.state]);
 
+  useEffect(() => {
+    if (selectedSiteId) {
+      const site = sites.find(s => s.id === selectedSiteId);
+      if (site) {
+        let clientNm = site.organizationName || site.clientName;
+        let desc = site.name;
+        setFormData(prev => ({
+          ...prev,
+          siteId: site.id,
+          clientName: clientNm,
+          description: desc
+        }));
+      }
+    }
+  }, [selectedSiteId, sites]);
+
   const componentRef = useRef();
   const handlePrintAction = useReactToPrint({ contentRef: componentRef });
-
-  const handleSiteChange = async (e) => {
-    const selectedSiteId = e.target.value;
-    const site = sites.find(s => s.id.toString() === selectedSiteId);
-    
-    // Prefer organizationName if it exists, otherwise fallback to clientName
-    let clientNm = site ? (site.organizationName || site.clientName) : "";
-    let desc = site ? site.name : "";
-
-    setFormData(prev => ({
-      ...prev,
-      siteId: selectedSiteId,
-      clientName: clientNm,
-      description: desc
-    }));
-  };
 
   const validateForm = () => {
     if (!formData.siteId) {
@@ -128,7 +134,9 @@ export default function ReceiptPage() {
       status: "Draft",
       receiptNo: "DRAFT",
       amountPaid: 0,
-      remainingAmount: parseFloat(formData.totalAmount)
+      siteId: formData.siteId ? formData.siteId.toString() : "",
+      totalAmount: parseFloat(formData.totalAmount) || 0,
+      remainingAmount: parseFloat(formData.totalAmount) || 0
     };
     try {
       const res = await fetch('/api/finance/receipts', {
@@ -150,29 +158,15 @@ export default function ReceiptPage() {
 
   const handleGenerateClick = (action) => {
     if (!validateForm()) return;
-    setGenerateAction(action);
-    setPaymentStatus("Complete");
-    setPartialAmount("");
-    setIsModalOpen(true);
+    confirmGenerate(action);
   };
 
-  const confirmGenerate = async () => {
+  const confirmGenerate = async (action) => {
     const total = parseFloat(formData.totalAmount);
-    let paid = 0;
     
-    if (paymentStatus === "Complete") {
-      paid = total;
-    } else if (paymentStatus === "Partial") {
-      paid = parseFloat(partialAmount);
-      if (isNaN(paid) || paid <= 0 || paid > total) {
-        showDialog({ title: "Invalid Amount", message: "Please enter a valid partial amount.", type: "error" });
-        return;
-      }
-    } else if (paymentStatus === "Pending") {
-      paid = 0;
-    }
-
-    const remaining = total - paid;
+    // Receipt generated fully
+    let paid = total;
+    let remaining = 0;
     
     const parts = formData.receiptNo.split("/");
     if (parts.length >= 3) {
@@ -181,7 +175,9 @@ export default function ReceiptPage() {
 
     const finalReceipt = {
       ...formData,
-      status: paymentStatus === "Complete" ? "Completed" : paymentStatus,
+      status: "Completed",
+      siteId: formData.siteId ? formData.siteId.toString() : "",
+      totalAmount: parseFloat(formData.totalAmount) || 0,
       amountPaid: paid,
       remainingAmount: remaining
     };
@@ -198,8 +194,8 @@ export default function ReceiptPage() {
         setReceipts([storedReceipt, ...receipts]);
         setIsModalOpen(false);
         
-        if (generateAction === "print") {
-          setPrintData(storedReceipt);
+        if (action === "print") {
+          setPrintData([storedReceipt]);
           setTimeout(() => {
             handlePrintAction();
           }, 100);
@@ -215,17 +211,15 @@ export default function ReceiptPage() {
   };
 
   const resetForm = () => {
-    setFormData({
+    setFormData(prev => ({
+      ...prev,
       receiptNo: getNewReceiptNumber(),
       date: new Date().toISOString().split("T")[0],
-      siteId: "",
-      clientName: "",
       totalAmount: "",
       category: "Advance Payment",
-      description: "",
       comments: "",
       paymentMode: "Cash"
-    });
+    }));
   };
 
   const deleteReceipt = (id) => {
@@ -255,10 +249,26 @@ export default function ReceiptPage() {
        showDialog({ title: "Cannot Print", message: "Drafts cannot be printed. Please generate the receipt first.", type: "alert" });
        return;
     }
-    setPrintData(receipt);
+    setPrintData([receipt]);
     setTimeout(() => {
       handlePrintAction();
     }, 100);
+  };
+
+  const printSelectedReceipts = () => {
+    const toPrint = receipts.filter(r => selectedReceipts.includes(r.id) && r.status !== "Draft");
+    if (toPrint.length === 0) {
+      showDialog({ title: "No Valid Receipts", message: "Please select completed receipts to print.", type: "alert" });
+      return;
+    }
+    setPrintData(toPrint);
+    setTimeout(() => {
+      handlePrintAction();
+    }, 100);
+  };
+
+  const toggleSelectReceipt = (id) => {
+    setSelectedReceipts(prev => prev.includes(id) ? prev.filter(r => r !== id) : [...prev, id]);
   };
 
   const getStatusColor = (status) => {
@@ -271,281 +281,277 @@ export default function ReceiptPage() {
     }
   };
 
-  const filteredReceipts = receipts.filter(r => historyFilter === "All" || r.status === historyFilter);
+  const filteredReceipts = receipts.filter(r => 
+    (historyFilter === "All" || r.status === historyFilter) &&
+    (!selectedSiteId || r.siteId === selectedSiteId.toString() || r.siteId === selectedSiteId) &&
+    (r.receiptNo.toLowerCase().includes(historySearchTerm.toLowerCase()) || 
+     (r.description && r.description.toLowerCase().includes(historySearchTerm.toLowerCase())))
+  );
+
+  const renderReceipt = (data) => (
+    <div key={data.id || data.receiptNo} className="p-10 bg-white text-slate-900 font-sans border-b-2 border-gray-400 h-[142mm] flex flex-col mx-auto w-[210mm] relative box-border">
+      <div className="flex justify-between border-b-2 border-slate-900 pb-6 mb-8">
+        <div className="flex items-center gap-4">
+          <img src="/logo.png" alt="Logo" className="w-16 h-16 object-contain rounded-lg" onError={(e) => { e.target.onerror = null; e.target.style.display = 'none'; }} />
+          <div>
+            <h1 className="text-2xl font-black uppercase tracking-tighter text-gray-900">Mona Interior Studio</h1>
+            <p className="font-bold text-gray-600 text-sm">Official Payment Receipt</p>
+            <div className="mt-2">
+               <span className="px-2 py-0.5 rounded border border-gray-600 text-[10px] font-black uppercase tracking-widest text-gray-800">
+                 Status: {data.status}
+               </span>
+            </div>
+          </div>
+        </div>
+        <div className="text-right mt-6">
+          <h2 className="text-xl font-black text-gray-900"># {data.receiptNo}</h2>
+          <p className="font-bold mt-1 text-sm text-gray-700">Date: {new Date(data.date).toLocaleDateString('en-IN')}</p>
+        </div>
+      </div>
+      
+      <div className="border border-gray-300 rounded-lg overflow-hidden mt-4">
+        <div className="grid grid-cols-3 border-b border-gray-300">
+          <div className="p-3 bg-gray-50 text-xs font-bold uppercase tracking-widest text-gray-600 border-r border-gray-300 flex items-center">Received From</div>
+          <div className="p-3 col-span-2 font-black text-gray-900">{data.clientName}</div>
+        </div>
+        <div className="grid grid-cols-3 border-b border-gray-300">
+          <div className="p-3 bg-gray-50 text-xs font-bold uppercase tracking-widest text-gray-600 border-r border-gray-300 flex items-center">Amount Received</div>
+          <div className="p-3 col-span-2 font-black text-gray-900 text-xl tracking-tight">₹ {parseFloat(data.amountPaid || data.totalAmount || 0).toLocaleString()}</div>
+        </div>
+        <div className="grid grid-cols-3 border-b border-gray-300">
+          <div className="p-3 bg-gray-50 text-xs font-bold uppercase tracking-widest text-gray-600 border-r border-gray-300 flex items-center">Payment Mode</div>
+          <div className="p-3 col-span-2 font-bold text-gray-900">{data.paymentMode}</div>
+        </div>
+        <div className="grid grid-cols-3 border-b border-gray-300">
+          <div className="p-3 bg-gray-50 text-xs font-bold uppercase tracking-widest text-gray-600 border-r border-gray-300 flex items-center">Towards</div>
+          <div className="p-3 col-span-2 font-bold text-gray-900">{data.category} {data.description ? `— ${data.description}` : ''}</div>
+        </div>
+        {data.comments && (
+          <div className="grid grid-cols-3">
+            <div className="p-3 bg-gray-50 text-xs font-bold uppercase tracking-widest text-gray-600 border-r border-gray-300 flex items-center">Remarks</div>
+            <div className="p-3 col-span-2 text-sm text-gray-800 italic">{data.comments}</div>
+          </div>
+        )}
+      </div>
+
+      <div className="mt-auto pt-4 border-t border-gray-300 text-center">
+        <p className="text-[10px] text-gray-500 italic font-medium">This is a computer generated document and does not require a physical signature.</p>
+      </div>
+    </div>
+  );
 
   return (
-    <div className="p-4 md:p-6 page-wrapper flex-1 h-full overflow-hidden flex flex-col font-sans relative">
+    <div className="p-4 md:p-6 page-wrapper h-full flex flex-col font-sans relative">
       <div className="flex justify-between items-center mb-5 shrink-0">
         <div>
           <h1 className="text-xl font-black text-themed flex items-center gap-2">
             <Receipt className="text-blue-500" size={18} />
             Payment Receipts
           </h1>
-          <p className="text-muted text-xs mt-0.5 font-medium">Generate and track customer payment receipts.</p>
+          <p className="text-muted text-xs mt-0.5 font-medium">Manage payments per work order.</p>
         </div>
-        <button
-          onClick={() => setShowHistory(!showHistory)}
-          className={`${
-            showHistory
-              ? 'bg-[var(--bg-card)] border border-[var(--border-color)] text-themed hover:bg-[var(--bg-card-hover)]'
-              : 'bg-indigo-600 text-white hover:bg-indigo-700'
-          } px-4 py-2 rounded-xl font-bold flex items-center gap-2 shadow-sm transition text-sm`}
-        >
-          {showHistory ? <><ArrowLeft size={16} /> Generate Receipt</> : <><History size={16} /> View History</>}
-        </button>
       </div>
 
-      {!showHistory ? (
-        <div className="themed-card shadow-2xl rounded-[32px] overflow-hidden p-5 max-w-5xl mx-auto flex-1 flex flex-col w-full relative">
-          <h2 className="text-xl font-black mb-4 flex items-center gap-2 shrink-0">
-            <Receipt size={20} className="text-blue-600"/> New Payment Receipt
-          </h2>
-          <form className="flex-1 flex flex-col justify-between overflow-hidden pr-2 pb-2">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-              <div className="bg-[var(--accent-soft)] p-3 rounded-2xl border border-[var(--border-color)] col-span-1 md:col-span-3 flex gap-3 items-center">
-                 <Building className="text-[var(--accent)] shrink-0" size={24}/>
-                 <div className="flex-1">
-                   <label className="block text-[10px] font-black text-[var(--accent)] uppercase tracking-widest mb-1">Select Work Order *</label>
-                   <SearchableSelect
-                     value={formData.siteId}
-                     onChange={handleSiteChange}
-                     options={sites.map(site => ({ value: site.id, label: `${site.name} (Client: ${site.clientName})` }))}
-                     placeholder="-- Select a Work Order --"
-                     className="w-full py-2 px-3 border-2 border-[var(--border-color)] rounded-xl text-sm font-bold themed-input focus:border-blue-500"
-                   />
+      <div className="grid grid-cols-1 xl:grid-cols-12 gap-8 flex-1 overflow-hidden">
+        {/* LEFT PANEL: WORK ORDERS LIST (VERTICAL TAB) */}
+        <div className="xl:col-span-4 h-[calc(100vh-160px)] flex flex-col bg-[var(--bg-surface)] border border-[var(--border-color)] rounded-3xl overflow-hidden shadow-sm">
+          <div className="p-5 border-b border-[var(--border-color)]">
+            <div className="relative w-full shadow-sm rounded-xl">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted" size={16} />
+              <input type="text" placeholder="Search Work Orders..." className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-[var(--border-color)] themed-input text-sm outline-none transition-all" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
+            </div>
+          </div>
+          <div className="flex-1 overflow-y-auto p-3 space-y-2 custom-scrollbar">
+             {sites.filter(s => s.name.toLowerCase().includes(searchTerm.toLowerCase()) || s.clientName.toLowerCase().includes(searchTerm.toLowerCase())).map(site => (
+                <button key={site.id} onClick={() => setSelectedSiteId(site.id)} className={`w-full text-left p-4 rounded-2xl transition border ${selectedSiteId === site.id ? "bg-[var(--accent)]/10 border-[var(--accent)]/30 shadow-sm" : "themed-card border-[var(--border-color)]"}`}>
+                  <h3 className="font-black text-themed text-sm mb-1">#{site.id} - {site.name}</h3>
+                  <div className="text-[10px] text-muted flex flex-col gap-1">
+                    <span className="flex items-center gap-1"><User size={10}/> {site.clientName}</span>
+                    <span className="flex items-center gap-1"><MapPin size={10}/> {site.address}</span>
+                  </div>
+                </button>
+             ))}
+          </div>
+        </div>
+
+        {/* RIGHT PANEL: RECEIPTS FOR SELECTED WORK ORDER */}
+        <div className="xl:col-span-8 h-[calc(100vh-160px)] flex flex-col overflow-hidden">
+           {selectedSiteId ? (
+              <div className="h-full flex flex-col">
+                 <div className="flex justify-between items-center mb-4 shrink-0 bg-[var(--bg-surface)] p-2 rounded-2xl border border-[var(--border-color)]">
+                    <div className="flex gap-2">
+                      <button onClick={() => setShowHistory(false)} className={`px-6 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition ${!showHistory ? "btn-accent shadow-md" : "text-muted hover:bg-white/5"}`}>New Receipt</button>
+                      <button onClick={() => setShowHistory(true)} className={`px-6 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition ${showHistory ? "btn-accent shadow-md" : "text-muted hover:bg-white/5"}`}>History</button>
+                    </div>
                  </div>
-              </div>
 
-              <div>
-                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Receipt No</label>
-                <input readOnly value={formData.receiptNo} className="w-full py-2 px-3 themed-input rounded-xl text-sm font-bold outline-none cursor-not-allowed opacity-60" />
-              </div>
-              <div>
-                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Date</label>
-                <input type="date" value={formData.date} onChange={e => setFormData({...formData, date: e.target.value})} className="w-full py-2 px-3 border border-[var(--border-color)] themed-input rounded-xl text-sm font-bold outline-none focus:border-blue-500" />
-              </div>
-              <div>
-                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Client Name *</label>
-                <input required value={formData.clientName} onChange={e => setFormData({...formData, clientName: e.target.value})} placeholder="e.g. John Doe" className="w-full py-2 px-3 themed-input rounded-xl text-sm font-bold outline-none focus:border-blue-500" />
-              </div>
-              <div>
-                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Total Amount Due (₹) *</label>
-                <input required type="number" value={formData.totalAmount} onChange={e => setFormData({...formData, totalAmount: e.target.value})} placeholder="0.00" className="w-full py-2 px-3 border border-[var(--border-color)] rounded-xl text-sm font-black text-emerald-500 themed-input outline-none focus:border-emerald-500" />
-              </div>
-              <div>
-                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Category</label>
-                <select value={formData.category} onChange={e => setFormData({...formData, category: e.target.value})} className="w-full py-2 px-3 border border-[var(--border-color)] themed-input rounded-xl text-sm font-bold outline-none focus:border-blue-500">
-                  <option>Advance Payment</option>
-                  <option>Partial Payment</option>
-                  <option>Closing Payment</option>
-                  <option>Security Deposit</option>
-                </select>
-              </div>
-              <div>
-                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Payment Mode</label>
-                <select value={formData.paymentMode} onChange={e => setFormData({...formData, paymentMode: e.target.value})} className="w-full py-2 px-3 themed-input border border-[var(--border-color)] rounded-xl text-sm font-bold outline-none focus:border-blue-500">
-                  <option>Cash</option>
-                  <option>UPI / Online</option>
-                  <option>Cheque</option>
-                  <option>Bank Transfer</option>
-                </select>
-              </div>
-              <div className="md:col-span-3">
-                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Description *</label>
-                <input required value={formData.description} onChange={e => setFormData({...formData, description: e.target.value})} placeholder="e.g. Master Bedroom Work" className="w-full py-2 px-3 themed-input border border-[var(--border-color)] rounded-xl text-sm font-bold outline-none focus:border-blue-500" />
-              </div>
-              <div className="md:col-span-3">
-                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Comments (Optional)</label>
-                <input value={formData.comments} onChange={e => setFormData({...formData, comments: e.target.value})} placeholder="Any additional details..." className="w-full py-2 px-3 themed-input border border-[var(--border-color)] rounded-xl text-sm font-bold outline-none focus:border-blue-500" />
-              </div>
-            </div>
-            
-            <div className="flex flex-wrap md:flex-nowrap gap-3 mt-4 pt-4 border-t border-[var(--border-color)] shrink-0">
-              <button type="button" onClick={saveAsDraft} className="flex-1 bg-[var(--bg-card)] border border-[var(--border-color)] text-muted hover:bg-[var(--bg-card-hover)] py-3 rounded-xl font-black uppercase tracking-widest transition flex justify-center items-center gap-2 text-xs">
-                 <Save size={16}/> Save Draft
-              </button>
-              <button type="button" onClick={() => handleGenerateClick('generate')} className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white py-3 rounded-xl font-black uppercase tracking-widest transition flex justify-center items-center gap-2 text-xs">
-                 <CheckCircle2 size={16}/> Generate
-              </button>
-              <button type="button" onClick={() => handleGenerateClick('print')} className="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-xl font-black uppercase tracking-widest shadow-lg shadow-blue-200 transition flex justify-center items-center gap-2 text-xs">
-                 <Printer size={16}/> Generate & Print
-              </button>
-            </div>
-          </form>
-        </div>
-      ) : (
-        <div className="themed-card shadow-2xl rounded-[32px] overflow-hidden flex flex-col h-full">
-          <div className="p-4 border-b border-[var(--border-color)] flex gap-2 overflow-x-auto bg-[var(--bg-surface)] shrink-0 scrollbar-hide">
-            {["All", "Completed", "Partial", "Pending", "Draft"].map(filter => (
-              <button
-                key={filter}
-                onClick={() => setHistoryFilter(filter)}
-                className={`px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition ${
-                  historyFilter === filter ? "btn-accent" : "themed-card text-[var(--text-secondary)] hover:bg-[var(--bg-card-hover)]"
-                }`}
-              >
-                {filter}
-              </button>
-            ))}
-          </div>
-          <div className="flex-1 overflow-y-auto">
-            <table className="w-full text-left">
-              <thead>
-                <tr className="text-[10px] font-black text-muted uppercase tracking-widest border-b border-[var(--border-color)] themed-thead sticky top-0 shadow-sm z-10">
-                  <th className="px-6 py-4">Receipt No & Date</th>
-                  <th className="px-6 py-4">Client Details</th>
-                  <th className="px-6 py-4">Status</th>
-                  <th className="px-6 py-4 text-right">Total Due</th>
-                  <th className="px-6 py-4 text-right">Paid</th>
-                  <th className="px-6 py-4 text-right">Balance</th>
-                  <th className="px-6 py-4 text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y themed-divider">
-                {filteredReceipts.map((r) => (
-                  <tr key={r.id} className="themed-row">
-                    <td className="px-6 py-4">
-                      <div className="font-bold text-themed">{r.receiptNo}</div>
-                      <div className="text-xs text-muted">{new Date(r.date).toLocaleDateString("en-IN")}</div>
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="font-bold text-themed">{r.clientName}</div>
-                      <div className="text-[10px] text-muted uppercase font-black">{r.category}</div>
-                    </td>
-                    <td className="px-6 py-4">
-                      <span className={`px-2.5 py-1 rounded-md border text-[9px] font-black uppercase tracking-widest ${getStatusColor(r.status)}`}>
-                        {r.status}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 text-right font-bold text-[var(--text-secondary)]">₹{parseFloat(r.totalAmount || 0).toLocaleString()}</td>
-                    <td className="px-6 py-4 text-right font-black text-emerald-500">₹{parseFloat(r.amountPaid || 0).toLocaleString()}</td>
-                    <td className="px-6 py-4 text-right font-bold text-rose-500">₹{parseFloat(r.remainingAmount || 0).toLocaleString()}</td>
-                    <td className="px-6 py-4 text-right">
-                       <div className="flex justify-end gap-2">
-                         <button onClick={() => printPastReceipt(r)} className={`font-bold text-[10px] uppercase tracking-widest px-3 py-1.5 rounded-lg transition ${r.status === 'Draft' ? 'bg-[var(--accent-soft)] text-muted cursor-not-allowed opacity-50' : 'bg-blue-500/10 text-blue-500 hover:bg-blue-500/20'}`}>Print</button>
-                         <button onClick={() => deleteReceipt(r.id)} className="text-rose-500 hover:text-rose-400 p-1.5 bg-rose-500/10 hover:bg-rose-500/20 rounded-lg transition"><Trash2 size={16}/></button>
+                 {!showHistory ? (
+                   // New Receipt Form
+                   <div className="themed-card shadow-sm rounded-3xl overflow-hidden p-4 flex-1 border border-[var(--border-color)] flex flex-col">
+                     <h2 className="text-lg font-black mb-2 flex items-center gap-2">
+                       <Receipt size={18} className="text-[var(--accent)]"/> New Payment Receipt
+                     </h2>
+                     <form className="flex flex-col justify-between">
+                       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                         <div>
+                           <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Receipt No</label>
+                           <input readOnly value={formData.receiptNo} className="w-full py-1.5 px-3 themed-input rounded-xl text-sm font-bold outline-none cursor-not-allowed opacity-60" />
+                         </div>
+                         <div>
+                           <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Date</label>
+                           <input type="date" value={formData.date} onChange={e => setFormData({...formData, date: e.target.value})} className="w-full py-1.5 px-3 border border-[var(--border-color)] themed-input rounded-xl text-sm font-bold outline-none focus:border-blue-500" />
+                         </div>
+                         <div>
+                           <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Client Name *</label>
+                           <input required value={formData.clientName} onChange={e => setFormData({...formData, clientName: e.target.value})} placeholder="e.g. John Doe" className="w-full py-1.5 px-3 border border-[var(--border-color)] themed-input rounded-xl text-sm font-bold outline-none focus:border-blue-500" />
+                         </div>
+                         <div>
+                           <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Total Received (₹) *</label>
+                           <input required type="text" inputMode="decimal" pattern="^\d*\.?\d*$" value={formData.totalAmount} onChange={e => setFormData({...formData, totalAmount: e.target.value.replace(/[^0-9.]/g, '').replace(/(\..*?)\..*/g, '$1')})} placeholder="0.00" className="w-full py-1.5 px-3 border border-[var(--border-color)] rounded-xl text-sm font-black text-emerald-500 themed-input outline-none focus:border-emerald-500" />
+                         </div>
+                         <div>
+                           <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Category</label>
+                           <select value={formData.category} onChange={e => setFormData({...formData, category: e.target.value})} className="w-full py-1.5 px-3 border border-[var(--border-color)] themed-input rounded-xl text-sm font-bold outline-none focus:border-blue-500">
+                             <option>Advance Payment</option>
+                             <option>Partial Payment</option>
+                             <option>Closing Payment</option>
+                             <option>Security Deposit</option>
+                           </select>
+                         </div>
+                         <div>
+                           <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Payment Mode</label>
+                           <select value={formData.paymentMode} onChange={e => setFormData({...formData, paymentMode: e.target.value})} className="w-full py-1.5 px-3 themed-input border border-[var(--border-color)] rounded-xl text-sm font-bold outline-none focus:border-blue-500">
+                             <option>Cash</option>
+                             <option>UPI / Online</option>
+                             <option>Cheque</option>
+                             <option>Bank Transfer</option>
+                           </select>
+                         </div>
+                         <div className="md:col-span-2">
+                           <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Description *</label>
+                           <input required value={formData.description} onChange={e => setFormData({...formData, description: e.target.value})} placeholder="e.g. Master Bedroom Work" className="w-full py-1.5 px-3 themed-input border border-[var(--border-color)] rounded-xl text-sm font-bold outline-none focus:border-blue-500" />
+                         </div>
+                         <div className="md:col-span-2">
+                           <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Comments (Optional)</label>
+                           <textarea value={formData.comments} rows={1} onChange={e => setFormData({...formData, comments: e.target.value})} placeholder="Any additional details..." className="w-full py-1.5 px-3 themed-input border border-[var(--border-color)] rounded-xl text-sm font-bold outline-none focus:border-blue-500" />
+                         </div>
                        </div>
-                    </td>
-                  </tr>
-                ))}
-                {filteredReceipts.length === 0 && (
-                  <tr><td colSpan="7" className="py-20 text-center text-slate-300 font-bold uppercase text-xs">No receipts found</td></tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
-
-      {/* Payment Status Modal */}
-      {isModalOpen && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
-          <div className="themed-modal rounded-[32px] shadow-2xl p-8 max-w-md w-full animate-in zoom-in-95 duration-200">
-            <div className="flex justify-between items-center mb-6">
-              <h3 className="text-xl font-black text-themed">Payment Status</h3>
-              <button onClick={() => setIsModalOpen(false)} className="text-muted hover:text-themed bg-[var(--bg-card)] p-2 rounded-xl transition">
-                <X size={20} />
-              </button>
-            </div>
-            
-            <div className="space-y-4 mb-6">
-              <div>
-                <label className="block text-[10px] font-black text-muted uppercase tracking-widest mb-2">Total Amount Due</label>
-                <div className="text-3xl font-black text-themed">₹{parseFloat(formData.totalAmount).toLocaleString()}</div>
+                       
+                       <div className="flex flex-col gap-3 mt-3 pt-3 border-t border-[var(--border-color)] shrink-0">
+                         <div className="flex flex-wrap md:flex-nowrap gap-3">
+                           <button type="button" onClick={saveAsDraft} className="flex-1 bg-[var(--bg-card)] border border-[var(--border-color)] text-muted hover:bg-[var(--bg-card-hover)] py-2.5 rounded-xl font-black uppercase tracking-widest transition flex justify-center items-center gap-2 text-xs">
+                              <Save size={16}/> Save Draft
+                           </button>
+                           <button type="button" onClick={() => handleGenerateClick('generate')} className="flex-1 btn-accent py-2.5 rounded-xl font-black uppercase tracking-widest transition flex justify-center items-center gap-2 text-xs">
+                              <CheckCircle2 size={16}/> Generate
+                           </button>
+                           <button type="button" onClick={() => handleGenerateClick('print')} className="flex-1 btn-accent py-2.5 rounded-xl font-black uppercase tracking-widest transition flex justify-center items-center gap-2 text-xs">
+                              <Printer size={16}/> Generate & Print
+                           </button>
+                         </div>
+                       </div>
+                     </form>
+                   </div>
+                 ) : (
+                   // History Table
+                   <div className="themed-card shadow-sm rounded-3xl overflow-hidden flex flex-col flex-1 border border-[var(--border-color)]">
+                     <div className="p-3 border-b border-[var(--border-color)] flex flex-wrap justify-between items-center gap-2 bg-[var(--bg-surface)] shrink-0 custom-scrollbar">
+                       <div className="flex gap-2 overflow-x-auto">
+                         {['All', 'Completed', 'Draft'].map(filter => (
+                           <button
+                             key={filter}
+                             onClick={() => setHistoryFilter(filter)}
+                             className={`px-4 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition ${historyFilter === filter ? 'btn-accent' : 'themed-card text-[var(--text-secondary)] hover:bg-[var(--bg-card-hover)]'}`}
+                           >
+                             {filter}
+                           </button>
+                         ))}
+                         {selectedReceipts.length > 0 && (
+                           <button onClick={printSelectedReceipts} className="px-4 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition btn-accent shadow flex items-center gap-2">
+                             <Printer size={12}/> Print Selected ({selectedReceipts.length})
+                           </button>
+                         )}
+                       </div>
+                       <div className="relative">
+                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted" size={14} />
+                         <input 
+                           type="text" 
+                           placeholder="Search Receipts..." 
+                           value={historySearchTerm}
+                           onChange={(e) => setHistorySearchTerm(e.target.value)}
+                           className="w-full sm:w-48 lg:w-64 pl-8 pr-3 py-1.5 rounded-xl border border-[var(--border-color)] themed-input text-xs font-bold outline-none transition-all" 
+                         />
+                       </div>
+                     </div>
+                     <div className="flex-1 overflow-y-auto custom-scrollbar">
+                       <table className="w-full text-left text-xs">
+                         <thead>
+                           <tr className="text-[9px] font-black text-muted uppercase tracking-widest border-b border-[var(--border-color)] themed-thead sticky top-0 shadow-sm z-10">
+                             <th className="px-4 py-3 w-8"></th>
+                             <th className="px-4 py-3">Receipt No</th>
+                             <th className="px-4 py-3">Status</th>
+                             <th className="px-4 py-3 text-right">Amount Received</th>
+                             <th className="px-4 py-3 text-right">Actions</th>
+                           </tr>
+                         </thead>
+                         <tbody className="divide-y themed-divider">
+                           {filteredReceipts.map((r) => (
+                             <tr key={r.id} className="themed-row">
+                               <td className="px-4 py-3">
+                                 <input type="checkbox" checked={selectedReceipts.includes(r.id)} onChange={() => toggleSelectReceipt(r.id)} className="rounded border-gray-400 cursor-pointer" />
+                               </td>
+                               <td className="px-4 py-3">
+                                 <div className="font-bold text-themed">{r.receiptNo}</div>
+                                 <div className="text-[9px] text-muted">{new Date(r.date).toLocaleDateString('en-IN')}</div>
+                               </td>
+                               <td className="px-4 py-3">
+                                 <span className={`px-2 py-0.5 rounded border text-[9px] font-black uppercase tracking-widest ${getStatusColor(r.status)}`}>
+                                   {r.status}
+                                 </span>
+                               </td>
+                               <td className="px-4 py-3 text-right font-black text-emerald-500">₹{parseFloat(r.amountPaid || r.totalAmount || 0).toLocaleString()}</td>
+                               <td className="px-4 py-3 text-right">
+                                  <div className="flex justify-end gap-1.5">
+                                    <button onClick={() => printPastReceipt(r)} className={`font-bold text-[9px] uppercase tracking-widest px-2 py-1 rounded-lg transition ${r.status === 'Draft' ? 'bg-[var(--accent-soft)] text-muted cursor-not-allowed opacity-50' : 'bg-[var(--accent)]/10 text-[var(--accent)] hover:bg-[var(--accent)]/20'}`}>Print</button>
+                                    <button onClick={() => deleteReceipt(r.id)} className="text-rose-500 hover:text-rose-400 p-1 bg-rose-500/10 hover:bg-rose-500/20 rounded-lg transition"><Trash2 size={14}/></button>
+                                  </div>
+                               </td>
+                             </tr>
+                           ))}
+                           {filteredReceipts.length === 0 && (
+                             <tr><td colSpan="4" className="py-20 text-center text-slate-300 font-bold uppercase text-xs">No receipts found for this project</td></tr>
+                           )}
+                         </tbody>
+                       </table>
+                     </div>
+                   </div>
+                 )}
               </div>
-
-              <div>
-                <label className="block text-[10px] font-black text-muted uppercase tracking-widest mb-2">Select Status</label>
-                <div className="grid grid-cols-3 gap-2">
-                  {["Complete", "Partial", "Pending"].map(status => (
-                    <button
-                      key={status}
-                      onClick={() => setPaymentStatus(status)}
-                      className={`py-3 px-2 rounded-xl text-xs font-black uppercase tracking-widest border-2 transition ${
-                        paymentStatus === status ? "bg-indigo-500/20 border-indigo-500 text-indigo-400" : "themed-card text-muted border-[var(--border-color)]"
-                      }`}
-                    >
-                      {status}
-                    </button>
-                  ))}
-                </div>
+           ) : (
+              <div className="h-full border-2 border-dashed border-[var(--border-color)] rounded-3xl flex flex-col items-center justify-center text-slate-400 bg-[var(--bg-surface)]">
+                <Building size={64} className="mb-4 text-slate-300" />
+                <p className="font-bold text-lg uppercase tracking-widest">Select a Work Order</p>
+                <p className="text-sm font-medium mt-2">Generate and view payment receipts per project.</p>
               </div>
-
-              {paymentStatus === "Partial" && (
-                <div className="animate-in fade-in slide-in-from-top-2">
-                  <label className="block text-[10px] font-black text-amber-500 uppercase tracking-widest mb-2">Partial Amount Received (₹)</label>
-                  <input
-                    type="number"
-                    value={partialAmount}
-                    onChange={(e) => setPartialAmount(e.target.value)}
-                    placeholder="Enter amount..."
-                    className="w-full py-3 px-4 border-2 border-amber-500/40 bg-amber-500/10 rounded-xl text-lg font-black text-amber-400 outline-none focus:border-amber-500"
-                    autoFocus
-                  />
-                </div>
-              )}
-            </div>
-
-            <button 
-              onClick={confirmGenerate} 
-              className="w-full bg-indigo-600 hover:bg-indigo-700 text-white py-4 rounded-2xl font-black uppercase tracking-widest shadow-xl transition active:scale-95"
-            >
-              Confirm & {generateAction === "print" ? "Print" : "Generate"}
-            </button>
-          </div>
+           )}
         </div>
-      )}
+      </div>
 
       {/* Hidden Print Content */}
-      <div style={{ display: "none" }}>
-        {printData && (
-          <div ref={componentRef} className="p-16 bg-white text-slate-900 font-sans border-[12px] border-slate-100 min-h-[500px]">
-            <div className="flex justify-between border-b-2 border-slate-900 pb-8 mb-10">
-              <div>
-                <h1 className="text-3xl font-black uppercase tracking-tighter">Mona Interior Studio</h1>
-                <p className="font-bold text-slate-500">Official Payment Receipt</p>
-                <div className="mt-4">
-                   <span className={`px-3 py-1 rounded border text-xs font-black uppercase tracking-widest ${getStatusColor(printData.status)}`}>
-                     Status: {printData.status}
-                   </span>
-                </div>
-              </div>
-              <div className="text-right">
-                <h2 className="text-4xl font-black text-slate-200"># {printData.receiptNo}</h2>
-                <p className="font-bold mt-2">Date: {new Date(printData.date).toLocaleDateString("en-IN")}</p>
-              </div>
-            </div>
-            
-            <div className="space-y-8 text-lg">
-              <p>Received with thanks from <span className="font-black border-b-2 border-slate-200 px-4 inline-block min-w-[200px]">{printData.clientName}</span></p>
-              <p>the sum of Rupees <span className="font-black border-b-2 border-slate-200 px-4 inline-block min-w-[150px]">₹ {parseFloat(printData.amountPaid || 0).toLocaleString()}</span></p>
-              <p>by <span className="font-black border-b-2 border-slate-200 px-4 inline-block">{printData.paymentMode}</span></p>
-              <p>towards <span className="font-black border-b-2 border-slate-200 px-4 inline-block">{printData.category} {printData.description ? `(${printData.description})` : ""}</span></p>
-              {printData.comments && <p className="text-sm text-slate-500 italic">Note: {printData.comments}</p>}
-            </div>
-
-            <div className="mt-16 grid grid-cols-3 gap-6 border-y-2 border-dashed border-slate-200 py-6">
-              <div>
-                <p className="text-[10px] font-bold text-slate-400 uppercase">Total Amount Due</p>
-                <p className="text-xl font-black">₹ {parseFloat(printData.totalAmount || 0).toLocaleString()}</p>
-              </div>
-              <div>
-                <p className="text-[10px] font-bold text-emerald-600 uppercase">Amount Received</p>
-                <p className="text-xl font-black text-emerald-600">₹ {parseFloat(printData.amountPaid || 0).toLocaleString()}</p>
-              </div>
-              <div>
-                <p className="text-[10px] font-bold text-rose-500 uppercase">Remaining Balance</p>
-                <p className="text-xl font-black text-rose-500">₹ {parseFloat(printData.remainingAmount || 0).toLocaleString()}</p>
-              </div>
-            </div>
-
-            <div className="flex justify-end items-end mt-24">
-              <div className="text-center">
-                 <div className="w-48 border-t-2 border-slate-900 mb-2"></div>
-                 <p className="font-black uppercase tracking-widest text-xs">Authorized Signatory</p>
-                 <p className="text-[10px] text-slate-400">Mona Interior Studio</p>
-              </div>
-            </div>
+      <div style={{ display: 'none' }}>
+        {printData.length > 0 && (
+          <div ref={componentRef} className="bg-white print-container">
+            {printData.map((data, idx) => (
+              <React.Fragment key={data.id || idx}>
+                {renderReceipt(data)}
+                {idx % 2 === 0 && idx !== printData.length - 1 && (
+                  <div className="w-[210mm] mx-auto flex items-center justify-center relative overflow-hidden py-1 opacity-60">
+                    <div className="w-full border-t border-dashed border-gray-500"></div>
+                    <span className="absolute bg-white px-2 text-[10px] uppercase tracking-widest font-black text-gray-500">✂ Cut Here</span>
+                  </div>
+                )}
+              </React.Fragment>
+            ))}
           </div>
         )}
       </div>

@@ -30,10 +30,15 @@ namespace Mona_Interior.Controllers
                 startDate = s.StartDate,
                 budget = s.Budget,
                 description = s.Description,
+                isNegotiated = s.IsNegotiated,
+                negotiationDetails = s.NegotiationDetails,
                 isArchived = s.IsArchived,
                 workHistory = string.IsNullOrEmpty(s.WorkHistory)
                     ? (object)"[]"
-                    : JsonSerializer.Deserialize<JsonElement>(s.WorkHistory)
+                    : JsonSerializer.Deserialize<JsonElement>(s.WorkHistory),
+                maintenance = string.IsNullOrEmpty(s.Maintenance)
+                    ? (object)"{}"
+                    : JsonSerializer.Deserialize<JsonElement>(s.Maintenance)
             }));
         }
 
@@ -52,8 +57,11 @@ namespace Mona_Interior.Controllers
                 StartDate = dto.StartDate,
                 Budget = dto.Budget,
                 Description = dto.Description,
+                IsNegotiated = dto.IsNegotiated,
+                NegotiationDetails = dto.NegotiationDetails ?? "",
                 IsArchived = dto.IsArchived,
-                WorkHistory = dto.WorkHistory.HasValue ? dto.WorkHistory.Value.GetRawText() : "[]"
+                WorkHistory = dto.WorkHistory.HasValue ? dto.WorkHistory.Value.GetRawText() : "[]",
+                Maintenance = dto.Maintenance.HasValue ? dto.Maintenance.Value.GetRawText() : "{}"
             };
             _db.Sites.Add(site);
             await _db.SaveChangesAsync();
@@ -75,9 +83,13 @@ namespace Mona_Interior.Controllers
             site.StartDate = dto.StartDate;
             site.Budget = dto.Budget;
             site.Description = dto.Description;
+            site.IsNegotiated = dto.IsNegotiated;
+            site.NegotiationDetails = dto.NegotiationDetails ?? "";
             site.IsArchived = dto.IsArchived;
             if (dto.WorkHistory.HasValue)
                 site.WorkHistory = dto.WorkHistory.Value.GetRawText();
+            if (dto.Maintenance.HasValue)
+                site.Maintenance = dto.Maintenance.Value.GetRawText();
             await _db.SaveChangesAsync();
             return Ok(new { message = "Site updated" });
         }

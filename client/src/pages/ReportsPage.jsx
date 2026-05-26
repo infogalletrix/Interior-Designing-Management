@@ -140,7 +140,7 @@ const ReportsPage = () => {
 
   const generatorPanel = t.isDark
     ? "themed-card border border-[var(--border-color)]"
-    : "bg-gradient-to-br from-orange-500 to-amber-500 text-white";
+    : "bg-gradient-to-br from-[#D4AF37] to-[#e5d3a1] text-white";
 
   return (
     <div className={`p-4 md:p-6 ${t.page}`}>
@@ -152,7 +152,7 @@ const ReportsPage = () => {
       <div className="relative z-10 mb-6">
         <motion.h1 initial={{ opacity:0, x:-20 }} animate={{ opacity:1, x:0 }}
           className={`text-xl font-black tracking-tight flex items-center gap-2 ${t.heading}`}>
-          <Activity className={t.isDark ? "text-violet-400" : "text-orange-500"} size={20} />
+          <Activity className={t.isDark ? "text-violet-400" : "text-[#D4AF37]"} size={20} />
           Reports &amp; Insights
         </motion.h1>
         <p className={`mt-0.5 text-xs font-medium ${t.muted}`}>
@@ -169,7 +169,7 @@ const ReportsPage = () => {
               { label:"Total Inflow", value:`₹${(totalInflow/100000).toFixed(2)}L`, icon:TrendingUp, color: t.isDark ? "text-emerald-400" : "text-emerald-600" },
               { label:"Total Outflow", value:`₹${(totalOutflow/100000).toFixed(2)}L`, icon:TrendingDown, color: t.isDark ? "text-rose-400" : "text-rose-600" },
               { label:"CRM Leads", value:totalLeads, icon:Users, color: t.isDark ? "text-blue-400" : "text-blue-600" },
-              { label:"Active Projects", value:activeProjects, icon:Building, color: t.isDark ? "text-violet-400" : "text-orange-500" },
+              { label:"Active Projects", value:activeProjects, icon:Building, color: t.isDark ? "text-violet-400" : "text-[#D4AF37]" },
             ].map(({ label, value, icon: Icon, color }) => (
               <div key={label} className={`${t.card} ${t.cardHover} p-6 rounded-[2rem]`}>
                 <h3 className={`${t.label} mb-2 flex items-center gap-2`}>
@@ -186,7 +186,7 @@ const ReportsPage = () => {
               {/* Cashflow Chart */}
               <div className={`${t.card} rounded-[2rem] p-6 lg:p-8`}>
                 <h3 className={`text-sm font-black mb-6 flex items-center gap-2 uppercase tracking-widest ${t.heading}`}>
-                  <Activity size={16} className={t.isDark ? "text-violet-400" : "text-orange-500"}/> Cashflow Overview (6 Months)
+                  <Activity size={16} className={t.isDark ? "text-violet-400" : "text-[#D4AF37]"}/> Cashflow Overview (6 Months)
                 </h3>
                 <ResponsiveContainer width="100%" height={250} minWidth={1}>
                   <BarChart data={cashflowTrend} margin={{ top:5, right:10, left:0, bottom:5 }} barCategoryGap="30%">
@@ -203,7 +203,7 @@ const ReportsPage = () => {
               {/* Lead Sources Pie */}
               <div className={`${t.card} rounded-[2rem] p-6 lg:p-8`}>
                 <h3 className={`text-sm font-black mb-6 flex items-center gap-2 uppercase tracking-widest ${t.heading}`}>
-                  <PieChartIcon size={16} className={t.isDark ? "text-violet-400" : "text-orange-500"}/> CRM Lead Sources
+                  <PieChartIcon size={16} className={t.isDark ? "text-violet-400" : "text-[#D4AF37]"}/> CRM Lead Sources
                 </h3>
                 <ResponsiveContainer width="100%" height={250} minWidth={1}>
                   <PieChart>

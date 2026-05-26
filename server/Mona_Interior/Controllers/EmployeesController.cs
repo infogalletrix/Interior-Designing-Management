@@ -12,6 +12,29 @@ namespace Mona_Interior.Controllers
         private readonly MonainteriorDbContext _db;
         public EmployeesController(MonainteriorDbContext db) => _db = db;
 
+        private int ComputeNextWorkerSerial()
+        {
+            var ids = _db.Employees
+                .Where(e => e.WorkerId != null && e.WorkerId.StartsWith("EMP-"))
+                .Select(e => e.WorkerId)
+                .AsEnumerable()
+                .Select(w =>
+                {
+                    var parts = w!.Split('-');
+                    return parts.Length == 2 && int.TryParse(parts[1], out int n) ? n : 0;
+                })
+                .ToList();
+            int maxSerial = ids.Count > 0 ? ids.Max() : 0;
+            return maxSerial + 1;
+        }
+
+        [HttpGet("next-id")]
+        public IActionResult GetNextWorkerId()
+        {
+            int next = ComputeNextWorkerSerial();
+            return Ok(new { nextWorkerId = $"EMP-{next:D4}" });
+        }
+
         // GET /api/employees
         [HttpGet]
         public async Task<IActionResult> GetAll()
@@ -68,6 +91,13 @@ namespace Mona_Interior.Controllers
         [HttpPost]
         public async Task<IActionResult> Create([FromBody] EmployeeDto dto)
         {
+            string assignedId = dto.WorkerId;
+            if (string.IsNullOrWhiteSpace(assignedId) || assignedId.StartsWith("MONA-"))
+            {
+                int next = ComputeNextWorkerSerial();
+                assignedId = $"EMP-{next:D4}";
+            }
+
             var emp = new Employee
             {
                 Name = dto.Name,
@@ -85,7 +115,7 @@ namespace Mona_Interior.Controllers
                 BankDetails = dto.BankDetails ?? "",
                 GovId = dto.GovId ?? "",
                 SalaryType = dto.SalaryType ?? "Monthly",
-                WorkerId = dto.WorkerId ?? ""
+                WorkerId = assignedId
             };
             _db.Employees.Add(emp);
             await _db.SaveChangesAsync();

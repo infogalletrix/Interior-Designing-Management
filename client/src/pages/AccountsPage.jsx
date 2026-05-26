@@ -45,10 +45,9 @@ export default function AccountsPage() {
         const res = await fetch('/api/finance/accounts');
         const data = await res.json();
         const txns = data.map(d => {
-          let dateStr = new Date().toISOString().split('T')[0];
+          let dateStr = new Date().toISOString();
           if (d.date) {
-            const parsed = new Date(d.date);
-            if (!isNaN(parsed)) dateStr = parsed.toISOString().split('T')[0];
+            dateStr = d.date; // Preserve full ISO string including time
           }
           return { ...d, amount: parseFloat(d.amount) || 0, date: dateStr };
         });
@@ -82,7 +81,15 @@ export default function AccountsPage() {
   const totalDebit = timeFiltered.filter((t) => t.type === "Debit").reduce((s, t) => s + t.amount, 0);
   const balance = totalCredit - totalDebit;
 
-  const sorted = [...finalFiltered].sort((a, b) => new Date(a.date) - new Date(b.date));
+  const sorted = [...finalFiltered].sort((a, b) => {
+    const dDiff = new Date(a.date) - new Date(b.date);
+    if (dDiff !== 0) return dDiff;
+    
+    // For same day, mix debits and credits by interleaving their table IDs
+    const idA = parseInt(a.id.split('-')[1]) || 0;
+    const idB = parseInt(b.id.split('-')[1]) || 0;
+    return idA - idB;
+  });
   let running = 0;
   const withBalance = sorted.map((t) => {
     running += t.type === "Credit" ? t.amount : -t.amount;
@@ -296,10 +303,17 @@ export default function AccountsPage() {
                 const CatIcon = getCategoryIcon(txn.category);
                 return (
                   <tr key={txn.id} className="themed-row group">
-                    <td className="px-8 py-5 text-sm text-muted font-medium whitespace-nowrap">
-                      {new Date(txn.date).toLocaleDateString("en-IN", {
-                        day: "2-digit", month: "short", year: "numeric",
-                      })}
+                    <td className="px-8 py-5 whitespace-nowrap">
+                      <div className="font-bold text-sm text-themed">
+                        {new Date(txn.date).toLocaleDateString("en-IN", {
+                          day: "2-digit", month: "short", year: "numeric",
+                        })}
+                      </div>
+                      <div className="text-[9px] font-black uppercase text-muted tracking-widest mt-0.5">
+                        {new Date(txn.date).toLocaleTimeString("en-IN", {
+                          hour: "2-digit", minute: "2-digit", hour12: true
+                        })}
+                      </div>
                     </td>
                     <td className="px-8 py-5 max-w-xs">
                       <p className="font-bold text-themed text-sm leading-tight">{txn.description}</p>

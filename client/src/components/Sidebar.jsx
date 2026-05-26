@@ -99,7 +99,7 @@ const Sidebar = ({ isOpen, toggleSidebar }) => {
                   Mona Interior
                 </h2>
                 <p className={`text-[10px] font-bold uppercase tracking-widest ${ t.isDark ? "text-slate-500" : "text-slate-300"}`}>
-                  Studio CRM
+                  Studio
                 </p>
               </div>
             </div>
@@ -163,9 +163,14 @@ const Sidebar = ({ isOpen, toggleSidebar }) => {
           {isOpen && <span className="font-semibold text-sm">{isDarkMode ? "Light Mode" : "Dark Mode"}</span>}
         </button>
         {isOpen && (
-          <p className={`text-[10px] text-center font-bold uppercase tracking-widest mt-2 ${ t.isDark ? "text-slate-600" : "text-slate-400"}`}>
-            © 2026 Mona Interior
-          </p>
+          <div className="flex flex-col items-center mt-2 gap-1 opacity-80 hover:opacity-100 transition-opacity">
+            <p className={`text-[10px] text-center font-bold uppercase tracking-widest ${ t.isDark ? "text-slate-500" : "text-slate-400"}`}>
+              © 2026 Mona Interior
+            </p>
+            <p className={`text-[8px] text-center font-bold uppercase tracking-[0.15em] ${ t.isDark ? "text-slate-600" : "text-slate-500"}`}>
+              Developed by <span className="text-[#D4AF37] font-black tracking-widest">Galletrix Innovations</span>
+            </p>
+          </div>
         )}
       </div>
     </nav>

@@ -20,7 +20,7 @@ namespace Mona_Interior.Controllers
         {
             string yy = DateTime.Now.ToString("yy");
             string mm = DateTime.Now.ToString("MM");
-            string monthPrefix = $"{yy}-{mm}-";
+            string monthPrefix = $"INV-{mm}{yy}-";
 
             var currentMonthNums = _db.Invoices
                 .Where(i => i.InvoiceNo != null && i.InvoiceNo.StartsWith(monthPrefix))
@@ -44,7 +44,7 @@ namespace Mona_Interior.Controllers
             string yy = DateTime.Now.ToString("yy");
             string mm = DateTime.Now.ToString("MM");
             int next = ComputeNextInvoiceSerial();
-            return Ok(new { nextNumber = $"{yy}-{mm}-{next:D4}" });
+            return Ok(new { nextNumber = $"INV-{mm}{yy}-{next:D4}" });
         }
 
         // GET /api/finance/invoices
@@ -83,8 +83,11 @@ namespace Mona_Interior.Controllers
                 string yy = DateTime.Now.ToString("yy");
                 string mm = DateTime.Now.ToString("MM");
                 int next = ComputeNextInvoiceSerial();
-                assignedNo = $"{yy}-{mm}-{next:D4}";
+                assignedNo = $"INV-{mm}{yy}-{next:D4}";
             }
+
+            var rawDate = string.IsNullOrEmpty(dto.Date) ? DateTime.Now.ToString("yyyy-MM-dd") : dto.Date;
+            if (!rawDate.Contains("T")) rawDate += "T" + DateTime.Now.ToString("HH:mm:ss");
 
             var inv = new Invoice
             {
@@ -100,7 +103,7 @@ namespace Mona_Interior.Controllers
                 Total = dto.Total,
                 BillType = dto.BillType,
                 Status = dto.Status,
-                Date = string.IsNullOrEmpty(dto.Date) ? DateTime.Now.ToString("yyyy-MM-dd") : dto.Date
+                Date = rawDate
             };
             _db.Invoices.Add(inv);
             await _db.SaveChangesAsync();
@@ -114,6 +117,11 @@ namespace Mona_Interior.Controllers
             var inv = await _db.Invoices.FindAsync(id);
             if (inv == null) return NotFound();
 
+            if (!string.IsNullOrEmpty(dto.InvoiceDate) && !dto.InvoiceDate.Contains("T")) {
+                if (!string.IsNullOrEmpty(inv.InvoiceDate) && inv.InvoiceDate.Contains("T")) {
+                    dto.InvoiceDate = dto.InvoiceDate + "T" + inv.InvoiceDate.Split('T')[1];
+                }
+            }
             inv.InvoiceNo = dto.InvoiceNo;
             inv.InvoiceDate = dto.InvoiceDate;
             inv.ClientName = dto.ClientName;
@@ -180,9 +188,12 @@ namespace Mona_Interior.Controllers
         [HttpPost("expenses")]
         public async Task<IActionResult> CreateExpense([FromBody] ExpenseDto dto)
         {
+            var rawDate = string.IsNullOrEmpty(dto.Date) ? DateTime.Now.ToString("yyyy-MM-dd") : dto.Date;
+            if (!rawDate.Contains("T")) rawDate += "T" + DateTime.Now.ToString("HH:mm:ss");
+
             var exp = new Expense
             {
-                Date = string.IsNullOrEmpty(dto.Date) ? DateTime.Now.ToString("yyyy-MM-dd") : dto.Date,
+                Date = rawDate,
                 Category = dto.Category,
                 Description = dto.Description,
                 Amount = dto.Amount,
@@ -201,6 +212,13 @@ namespace Mona_Interior.Controllers
             var exp = await _db.Expenses.FindAsync(id);
             if (exp == null) return NotFound();
 
+            if (!string.IsNullOrEmpty(dto.Date) && !dto.Date.Contains("T")) {
+                if (!string.IsNullOrEmpty(exp.Date) && exp.Date.Contains("T")) {
+                    dto.Date = dto.Date + "T" + exp.Date.Split('T')[1];
+                } else {
+                    dto.Date = dto.Date + "T" + DateTime.Now.ToString("HH:mm:ss");
+                }
+            }
             exp.Date = dto.Date;
             exp.Category = dto.Category;
             exp.Description = dto.Description;
@@ -252,6 +270,9 @@ namespace Mona_Interior.Controllers
         [HttpPost("payroll")]
         public async Task<IActionResult> CreatePayroll([FromBody] PayrollDto dto)
         {
+            var rawDate = string.IsNullOrEmpty(dto.PaidDate) ? DateTime.Now.ToString("yyyy-MM-dd") : dto.PaidDate;
+            if (!rawDate.Contains("T")) rawDate += "T" + DateTime.Now.ToString("HH:mm:ss");
+
             var record = new PayrollRecord
             {
                 EmployeeId = dto.EmployeeId,
@@ -260,7 +281,7 @@ namespace Mona_Interior.Controllers
                 BaseSalary = dto.BaseSalary,
                 Deductions = dto.Deductions,
                 NetPay = dto.NetPay,
-                PaidDate = dto.PaidDate,
+                PaidDate = rawDate,
                 Status = dto.Status,
                 AttendanceBreakdown = dto.AttendanceBreakdown.HasValue
                     ? dto.AttendanceBreakdown.Value.GetRawText()
@@ -269,6 +290,89 @@ namespace Mona_Interior.Controllers
             _db.PayrollRecords.Add(record);
             await _db.SaveChangesAsync();
             return Ok(new { id = record.Id.ToString(), message = "Payroll entry saved" });
+        }
+
+        // PUT /api/finance/payroll/{id}
+        [HttpPut("payroll/{id}")]
+        public async Task<IActionResult> UpdatePayroll(int id, [FromBody] PayrollDto dto)
+        {
+            var record = await _db.PayrollRecords.FindAsync(id);
+            if (record == null) return NotFound();
+
+            // Parse old and new attendance breakdown to find advance deductions
+            decimal oldAdvance = 0;
+            decimal newAdvance = 0;
+            try {
+                var oldEntry = JsonSerializer.Deserialize<JsonElement>(record.AttendanceBreakdown);
+                if (oldEntry.TryGetProperty("advanceDeduction", out var oldAdvProp)) {
+                    decimal.TryParse(oldAdvProp.GetString(), out oldAdvance);
+                }
+                if (oldEntry.TryGetProperty("amount", out var oldAdvAmtProp) && oldEntry.TryGetProperty("type", out var oldTypeProp) && oldTypeProp.GetString() == "Advance") {
+                    decimal.TryParse(oldAdvAmtProp.GetString(), out oldAdvance);
+                    oldAdvance = -oldAdvance; // Advance given increases balance
+                }
+            } catch {}
+
+            try {
+                if (dto.AttendanceBreakdown.HasValue) {
+                    if (dto.AttendanceBreakdown.Value.TryGetProperty("advanceDeduction", out var newAdvProp)) {
+                        decimal.TryParse(newAdvProp.GetString(), out newAdvance);
+                    }
+                    if (dto.AttendanceBreakdown.Value.TryGetProperty("amount", out var newAdvAmtProp) && dto.AttendanceBreakdown.Value.TryGetProperty("type", out var newTypeProp) && newTypeProp.GetString() == "Advance") {
+                        decimal.TryParse(newAdvAmtProp.GetString(), out newAdvance);
+                        newAdvance = -newAdvance;
+                    }
+                }
+            } catch {}
+
+            var emp = await _db.Employees.FindAsync(record.EmployeeId);
+            if (emp != null) {
+                // Revert old advance effect, apply new advance effect
+                // If oldAdvance was 500 (deducted), we add 500 back. If newAdvance is 800, we subtract 800.
+                emp.AdvanceBalance = emp.AdvanceBalance + oldAdvance - newAdvance;
+            }
+
+            record.BaseSalary = dto.BaseSalary;
+            record.Deductions = dto.Deductions;
+            record.NetPay = dto.NetPay;
+            record.PaidDate = dto.PaidDate;
+            record.AttendanceBreakdown = dto.AttendanceBreakdown.HasValue ? dto.AttendanceBreakdown.Value.GetRawText() : record.AttendanceBreakdown;
+
+            await _db.SaveChangesAsync();
+            return Ok(new { message = "Payroll updated" });
+        }
+
+        // DELETE /api/finance/payroll/{id}
+        [HttpDelete("payroll/{id}")]
+        public async Task<IActionResult> DeletePayroll(int id)
+        {
+            var record = await _db.PayrollRecords.FindAsync(id);
+            if (record == null) return NotFound();
+
+            // Instead of deleting, mark as reversed so it shows as a Reversal Credit
+            record.Status = "Reversed";
+
+            // Refund advance if it was a salary deduction
+            decimal advToRefund = 0;
+            try {
+                var entry = JsonSerializer.Deserialize<JsonElement>(record.AttendanceBreakdown);
+                if (entry.TryGetProperty("advanceDeduction", out var advProp)) {
+                    decimal.TryParse(advProp.GetString(), out advToRefund);
+                }
+                // If it was an advance issuance, delete means we remove the balance!
+                if (entry.TryGetProperty("amount", out var advAmtProp) && entry.TryGetProperty("type", out var typeProp) && typeProp.GetString() == "Advance") {
+                    decimal.TryParse(advAmtProp.GetString(), out advToRefund);
+                    advToRefund = -advToRefund; // Negate so it subtracts from balance
+                }
+            } catch {}
+
+            var emp = await _db.Employees.FindAsync(record.EmployeeId);
+            if (emp != null) {
+                emp.AdvanceBalance = emp.AdvanceBalance + advToRefund;
+            }
+
+            await _db.SaveChangesAsync();
+            return Ok(new { message = "Payroll reversed" });
         }
 
         // ── RECEIPTS ──────────────────────────────────────────────────
@@ -296,13 +400,55 @@ namespace Mona_Interior.Controllers
             return Ok(result);
         }
 
+        private int ComputeNextReceiptSerial()
+        {
+            string yy = DateTime.Now.ToString("yy");
+            string mm = DateTime.Now.ToString("MM");
+            string monthPrefix = $"RCP-{mm}{yy}-";
+
+            var currentMonthNums = _db.PaymentReceipts
+                .Where(r => r.ReceiptNo != null && r.ReceiptNo.StartsWith(monthPrefix))
+                .Select(r => r.ReceiptNo)
+                .AsEnumerable()
+                .Select(r =>
+                {
+                    var parts = r!.Split('-');
+                    return parts.Length == 3 && int.TryParse(parts[2], out int n) ? n : 0;
+                })
+                .ToList();
+
+            int maxSerial = currentMonthNums.Count > 0 ? currentMonthNums.Max() : 0;
+            return maxSerial >= 9999 ? 1 : maxSerial + 1;
+        }
+
+        [HttpGet("receipts/next-number")]
+        public IActionResult GetNextReceiptNumber()
+        {
+            string yy = DateTime.Now.ToString("yy");
+            string mm = DateTime.Now.ToString("MM");
+            int next = ComputeNextReceiptSerial();
+            return Ok(new { nextNumber = $"RCP-{mm}{yy}-{next:D4}" });
+        }
+
         [HttpPost("receipts")]
         public async Task<IActionResult> CreateReceipt([FromBody] PaymentReceiptDto dto)
         {
+            string assignedNo = dto.ReceiptNo;
+            if (string.IsNullOrWhiteSpace(assignedNo) || assignedNo.StartsWith("MI/RCP/"))
+            {
+                string yy = DateTime.Now.ToString("yy");
+                string mm = DateTime.Now.ToString("MM");
+                int next = ComputeNextReceiptSerial();
+                assignedNo = $"RCP-{mm}{yy}-{next:D4}";
+            }
+
+            var rawDate = string.IsNullOrEmpty(dto.Date) ? DateTime.Now.ToString("yyyy-MM-dd") : dto.Date;
+            if (!rawDate.Contains("T")) rawDate += "T" + DateTime.Now.ToString("HH:mm:ss");
+
             var r = new PaymentReceipt
             {
-                ReceiptNo = dto.ReceiptNo,
-                Date = string.IsNullOrEmpty(dto.Date) ? DateTime.Now.ToString("yyyy-MM-dd") : dto.Date,
+                ReceiptNo = assignedNo,
+                Date = rawDate,
                 SiteId = dto.SiteId,
                 ClientName = dto.ClientName,
                 TotalAmount = dto.TotalAmount,
@@ -325,6 +471,13 @@ namespace Mona_Interior.Controllers
             var r = await _db.PaymentReceipts.FindAsync(id);
             if (r == null) return NotFound();
 
+            if (!string.IsNullOrEmpty(dto.Date) && !dto.Date.Contains("T")) {
+                if (!string.IsNullOrEmpty(r.Date) && r.Date.Contains("T")) {
+                    dto.Date = dto.Date + "T" + r.Date.Split('T')[1];
+                } else {
+                    dto.Date = dto.Date + "T" + DateTime.Now.ToString("HH:mm:ss");
+                }
+            }
             r.ReceiptNo = dto.ReceiptNo;
             r.Date = dto.Date;
             r.SiteId = dto.SiteId;
@@ -386,7 +539,19 @@ namespace Mona_Interior.Controllers
                 category = "Employee Payroll",
                 description = $"Payroll — Employee ID {p.EmployeeId} ({p.Month} {p.Year})",
                 amount = p.NetPay
-            })).OrderByDescending(e => e.date).ToList();
+            })).ToList();
+
+            var reversedPayroll = payroll.Where(p => p.Status == "Reversed").Select(p => new
+            {
+                id = "payrev-" + p.Id,
+                date = p.PaidDate,
+                type = "Credit",
+                category = "Employee Payroll",
+                description = $"Payroll Reversal — Employee ID {p.EmployeeId} ({p.Month} {p.Year})",
+                amount = p.NetPay
+            }).ToList();
+
+            ledgerEntries = ledgerEntries.Concat(reversedPayroll).OrderByDescending(e => e.date).ToList();
 
             return Ok(ledgerEntries);
         }

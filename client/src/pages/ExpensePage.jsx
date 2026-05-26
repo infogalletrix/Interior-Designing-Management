@@ -19,6 +19,7 @@ import {
   Trash2,
   ArrowLeft,
   CheckCircle,
+  Pencil,
 } from "lucide-react";
 import { useDialog } from "../contexts/DialogContext";
 import SearchableSelect from "../components/SearchableSelect";
@@ -91,6 +92,7 @@ export default function ExpensePage() {
   const [viewType, setViewType] = useState("Monthly");
   const [searchTerm, setSearchTerm] = useState("");
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingExpenseId, setEditingExpenseId] = useState(null);
   const [expenseHistory, setExpenseHistory] = useState([]);
 
   const isClientOnlyView = location.state?.view === "ClientOnly";
@@ -138,7 +140,14 @@ export default function ExpensePage() {
         await fetch('/api/finance/expenses', {
           method: 'POST',
           headers: {'Content-Type': 'application/json'},
-          body: JSON.stringify({ date: item.date, category: item.category, description: item.expenseType === "Client" ? item.material : item.description, amount: item.cost, clientId: item.client, type: item.expenseType })
+          body: JSON.stringify({ 
+            date: item.date, 
+            category: item.category || "", 
+            description: item.expenseType === "Client" ? item.material : item.description, 
+            amount: item.cost, 
+            clientId: item.client ? item.client.toString() : "", 
+            type: item.expenseType 
+          })
         });
       }
       await loadExpenses();
@@ -170,17 +179,37 @@ export default function ExpensePage() {
     e.preventDefault();
     const entry = {
       ...newExpense,
-      id: `EXP-${Date.now()}`,
       cost: parseFloat(newExpense.cost),
     };
     try {
-      await fetch('/api/finance/expenses', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({ date: entry.date, category: entry.category, description: entry.expenseType === "Client" ? entry.material : entry.description, amount: entry.cost, clientId: entry.client, type: entry.expenseType })
-      });
+      const payload = { 
+        date: entry.date, 
+        category: entry.category || "", 
+        description: entry.expenseType === "Client" ? entry.material : entry.description, 
+        amount: entry.cost, 
+        clientId: entry.client ? entry.client.toString() : "", 
+        type: entry.expenseType 
+      };
+
+      if (editingExpenseId) {
+        await fetch(`/api/finance/expenses/${editingExpenseId}`, {
+          method: 'PUT',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify(payload)
+        });
+        showDialog({ title: "Updated", message: "Expense updated successfully", type: "success" });
+      } else {
+        await fetch('/api/finance/expenses', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify(payload)
+        });
+        showDialog({ title: "Recorded", message: "Expense recorded successfully", type: "success" });
+      }
+
       loadExpenses();
       setIsModalOpen(false);
+      setEditingExpenseId(null);
       setNewExpense({
         expenseType: "Client",
         client: "",
@@ -192,6 +221,36 @@ export default function ExpensePage() {
         date: new Date().toISOString().split("T")[0],
       });
     } catch(err) { console.error(err); }
+  };
+
+  const handleEditExpense = (expense) => {
+    setEditingExpenseId(expense.id);
+    setNewExpense({
+      expenseType: expense.expenseType,
+      client: expense.client || "",
+      material: expense.expenseType === "Client" ? expense.material : "",
+      qty: "", // Qty not stored in backend, reset
+      cost: expense.cost.toString(),
+      category: expense.category || OVERHEAD_CATEGORIES[0],
+      description: expense.expenseType !== "Client" ? expense.description : "",
+      date: expense.date ? expense.date.split("T")[0] : new Date().toISOString().split("T")[0],
+    });
+    setIsModalOpen(true);
+  };
+
+  const handleDeleteExpense = (id) => {
+    showDialog({
+      title: "Delete Expense",
+      message: "Are you sure you want to delete this log? This will update the Accounts ledger.",
+      type: "confirm",
+      onConfirm: async () => {
+        try {
+          await fetch(`/api/finance/expenses/${id}`, { method: 'DELETE' });
+          loadExpenses();
+          showDialog({ title: "Deleted", message: "Expense deleted successfully.", type: "success" });
+        } catch(err) { console.error(err); }
+      }
+    });
   };
 
   const timeFiltered = expenseHistory.filter((item) => {
@@ -209,10 +268,11 @@ export default function ExpensePage() {
   });
 
   const tabFiltered = timeFiltered.filter((e) => {
+    if (activeTab === "All") return true;
     if (activeTab === "Client") return e.expenseType === "Client";
     if (activeTab === "Overhead") return e.expenseType === "Overhead";
     if (activeTab === "Credit") return e.expenseType === "Credit";
-    return e.expenseType !== "Credit";
+    return true;
   });
 
   const searchFiltered = tabFiltered.filter((e) => {
@@ -629,6 +689,7 @@ export default function ExpensePage() {
                 <th className="px-8 py-4">Category / Client</th>
                 <th className="px-8 py-4">Qty / Unit</th>
                 <th className="px-8 py-4 text-right">Cost (₹)</th>
+                <th className="px-8 py-4 text-center">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y themed-divider">
@@ -685,6 +746,24 @@ export default function ExpensePage() {
                   <td className="px-8 py-5 text-right font-black text-themed text-base">
                     ₹{expense.cost.toLocaleString()}
                   </td>
+                  <td className="px-8 py-5 text-center">
+                    <div className="flex items-center justify-center gap-3 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <button 
+                        onClick={() => handleEditExpense(expense)}
+                        className="p-2 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 text-indigo-500 rounded-lg transition-colors"
+                        title="Edit Expense"
+                      >
+                        <Pencil size={16} />
+                      </button>
+                      <button 
+                        onClick={() => handleDeleteExpense(expense.id)}
+                        className="p-2 hover:bg-rose-50 dark:hover:bg-rose-900/30 text-rose-500 rounded-lg transition-colors"
+                        title="Delete Expense"
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -725,7 +804,20 @@ export default function ExpensePage() {
           >
             <button
               type="button"
-              onClick={() => setIsModalOpen(false)}
+              onClick={() => {
+                setIsModalOpen(false);
+                setEditingExpenseId(null);
+                setNewExpense({
+                  expenseType: "Client",
+                  client: "",
+                  material: "",
+                  qty: "",
+                  cost: "",
+                  category: OVERHEAD_CATEGORIES[0],
+                  description: "",
+                  date: new Date().toISOString().split("T")[0],
+                });
+              }}
               className="absolute top-8 right-8 text-muted hover:text-themed transition"
             >
               <X size={28} />

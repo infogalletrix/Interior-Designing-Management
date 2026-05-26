@@ -12,8 +12,15 @@ import { useDialog } from "../contexts/DialogContext";
 
 const EmployeesPage = () => {
   const { showDialog } = useDialog();
-  const generateWorkerId = () =>
-    `MONA-${new Date().getFullYear()}-${Math.floor(100 + Math.random() * 900)}`;
+  const fetchNextWorkerId = async () => {
+    try {
+      const res = await fetch("/api/employees/next-id");
+      if (res.ok) {
+        const data = await res.json();
+        setFormData(prev => ({ ...prev, workerId: data.nextWorkerId }));
+      }
+    } catch (e) {}
+  };
 
   const [employees, setEmployees] = useState([]);
   
@@ -39,6 +46,7 @@ const EmployeesPage = () => {
     status: "Active",
     bankDetails: "",
     govId: "",
+    workerId: "",
   });
   const [isOtherRole, setIsOtherRole] = useState(false);
 
@@ -58,6 +66,8 @@ const EmployeesPage = () => {
         setEmployees(data);
       })
       .catch(console.error);
+      
+    fetchNextWorkerId();
   }, []);
 
   const saveToStorage = async (updatedEmployees, deletedId = null) => {
@@ -147,7 +157,9 @@ const EmployeesPage = () => {
           showDialog({ title: "Error", message: `Failed to update employee: ${errorData.message || res.statusText || "Unknown error"}`, type: "error" });
         }
       } else {
-        const finalPayload = { ...payload, workerId: generateWorkerId() };
+        // Create new employee
+        // Do not pass workerId; let backend generate it or use the one we fetched
+        const finalPayload = { ...payload, workerId: formData.workerId || "" };
         
         const res = await fetch('/api/employees', {
           method: 'POST',
@@ -178,8 +190,9 @@ const EmployeesPage = () => {
     setFormData({
       name: "", role: "", phone: "", email: "", address: "",
       salary: "", salaryType: "Monthly", status: "Active",
-      bankDetails: "", govId: "",
+      bankDetails: "", govId: "", workerId: "",
     });
+    fetchNextWorkerId();
   };
 
   // --- FILTERING ---

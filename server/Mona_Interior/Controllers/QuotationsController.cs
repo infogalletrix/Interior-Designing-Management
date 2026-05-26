@@ -18,7 +18,7 @@ namespace Mona_Interior.Controllers
         {
             string yy = DateTime.Now.ToString("yy");
             string mm = DateTime.Now.ToString("MM");
-            string monthPrefix = $"{yy}-{mm}-";
+            string monthPrefix = $"QT-{mm}{yy}-";
 
             var currentMonthNums = _db.Quotations
                 .Where(q => q.QuoteNo != null && q.QuoteNo.StartsWith(monthPrefix))
@@ -42,7 +42,7 @@ namespace Mona_Interior.Controllers
             string yy = DateTime.Now.ToString("yy");
             string mm = DateTime.Now.ToString("MM");
             int next = ComputeNextQuoteSerial();
-            return Ok(new { nextNumber = $"{yy}-{mm}-{next:D4}" });
+            return Ok(new { nextNumber = $"QT-{mm}{yy}-{next:D4}" });
         }
 
         // GET /api/quotations
@@ -80,7 +80,7 @@ namespace Mona_Interior.Controllers
                 string yy = DateTime.Now.ToString("yy");
                 string mm = DateTime.Now.ToString("MM");
                 int next = ComputeNextQuoteSerial();
-                assignedNo = $"{yy}-{mm}-{next:D4}";
+                assignedNo = $"QT-{mm}{yy}-{next:D4}";
             }
 
             // Try to find a matching CrmContact

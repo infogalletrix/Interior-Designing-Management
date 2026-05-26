@@ -7,7 +7,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   Users, Wallet, X, ChevronRight, CheckCircle2, Clock,
   Search, Printer, CalendarDays, User, CreditCard, Banknote,
-  MessageCircle, Eye, Send
+  MessageCircle, Eye, Send, Pencil, Trash2
 } from "lucide-react";
 import { useDialog } from "../contexts/DialogContext";
 
@@ -33,29 +33,31 @@ export default function SalaryPage() {
   // UI States
   const [actionType, setActionType] = useState("Salary"); // "Salary" | "Advance"
   const [historyTab, setHistoryTab] = useState("Salary"); // "Salary" | "Advance"
+  const [editPayrollId, setEditPayrollId] = useState(null);
 
   // Load Data
+  const fetchEmployees = async () => {
+    try {
+      const res = await fetch('/api/employees');
+      const data = await res.json();
+      setEmployees(data);
+    } catch (err) { console.error(err); }
+  };
+
+  const fetchPayroll = async () => {
+    try {
+      const res = await fetch('/api/finance/payroll');
+      const data = await res.json();
+      // Restore the full React entry state from the attendanceBreakdown JSON object
+      const restoredHistory = data.map(d => ({
+        ...d.attendanceBreakdown,
+        id: d.id || d.attendanceBreakdown?.id,
+      })).filter(d => d.type); // ensure it's a valid history item
+      setPayrollHistory(restoredHistory);
+    } catch (err) { console.error(err); }
+  };
+
   useEffect(() => {
-    const fetchEmployees = async () => {
-      try {
-        const res = await fetch('/api/employees');
-        const data = await res.json();
-        setEmployees(data);
-      } catch (err) { console.error(err); }
-    };
-    const fetchPayroll = async () => {
-      try {
-        const res = await fetch('/api/finance/payroll');
-        const data = await res.json();
-        // Restore the full React entry state from the attendanceBreakdown JSON object
-        const restoredHistory = data.map(d => ({
-          ...d.attendanceBreakdown,
-          id: d.id || d.attendanceBreakdown?.id,
-        })).filter(d => d.type); // ensure it's a valid history item
-        setPayrollHistory(restoredHistory);
-      } catch (err) { console.error(err); }
-    };
-    
     fetchEmployees();
     fetchPayroll();
   }, []);
@@ -98,16 +100,26 @@ export default function SalaryPage() {
         const days = parseFloat(salForm.paidDays || 0);
         calcBasic = parseFloat(selectedEmployee.salary || 0) * days;
       } else {
-        calcBasic = parseFloat(selectedEmployee.salary || 0);
+        const baseMonthly = parseFloat(selectedEmployee.salary || 0);
+        const lop = parseFloat(salForm.lopDays || 0);
+        
+        if (lop > 0) {
+          const monthIdx = MONTHS.indexOf(selectedMonth);
+          const daysInMonth = new Date(selectedYear, monthIdx + 1, 0).getDate();
+          const dailyRate = baseMonthly / daysInMonth;
+          calcBasic = baseMonthly - (dailyRate * lop);
+        } else {
+          calcBasic = baseMonthly;
+        }
       }
       
       setSalForm(f => ({
         ...f,
-        basic: calcBasic.toString(),
+        basic: Math.max(0, Math.round(calcBasic)).toString(),
         advanceDeduction: selectedEmployee.advanceBalance > 0 ? selectedEmployee.advanceBalance.toString() : "0"
       }));
     }
-  }, [selectedEmployee, salForm.paidDays, actionType]);
+  }, [selectedEmployee, salForm.paidDays, salForm.lopDays, selectedMonth, selectedYear, actionType]);
 
   // Salary Calculations
   const basic = parseFloat(salForm.basic || 0);
@@ -125,6 +137,7 @@ export default function SalaryPage() {
     // Automatically calculate paidDays and otHours based on attendance
     let computedPaidDays = 30; // fallback
     let computedOtHours = 0;
+    let computedLopDays = 0;
     try {
       const monthStr = (MONTHS.indexOf(selectedMonth) + 1).toString().padStart(2, '0');
       const yearMonth = `${selectedYear}-${monthStr}`;
@@ -151,6 +164,7 @@ export default function SalaryPage() {
         } else {
           // For Monthly wages, assume full month minus explicitly marked absences
           computedPaidDays = daysInMonth - absentDays;
+          computedLopDays = absentDays;
         }
       }
     } catch (e) {
@@ -160,6 +174,7 @@ export default function SalaryPage() {
     setSalForm(f => ({
       ...f,
       paidDays: computedPaidDays.toString(),
+      lopDays: computedLopDays.toString(),
       otHours: computedOtHours > 0 ? computedOtHours.toString() : "",
       otRate: "",
       otherDeductions: "",
@@ -188,7 +203,7 @@ export default function SalaryPage() {
 
   const executeProcessSalary = async (shouldPrint) => {
     const entry = {
-      id: `PR-SAL-${Date.now()}`,
+      id: editPayrollId || `PR-SAL-${Date.now()}`,
       type: "Salary",
       employeeId: selectedEmployee.id,
       employeeName: selectedEmployee.name,
@@ -221,30 +236,33 @@ export default function SalaryPage() {
     };
 
     try {
-      const res = await fetch('/api/finance/payroll', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify(payload)
-      });
-      const data = await res.json();
-      
-      const savedEntry = { ...entry, id: data.id || entry.id };
-      saveHistory([savedEntry, ...payrollHistory]);
-
-      if (advanceDed > 0) {
-        const newBalance = Math.max(0, (selectedEmployee.advanceBalance || 0) - advanceDed);
-        await fetch(`/api/employees/${selectedEmployee.id}`, {
+      let res;
+      if (editPayrollId) {
+        res = await fetch(`/api/finance/payroll/${editPayrollId}`, {
           method: 'PUT',
           headers: {'Content-Type': 'application/json'},
-          body: JSON.stringify({...selectedEmployee, advanceBalance: newBalance})
+          body: JSON.stringify(payload)
         });
-        const updatedEmps = employees.map(emp => {
-          if (emp.id === selectedEmployee.id) {
-            return { ...emp, advanceBalance: newBalance };
-          }
-          return emp;
+      } else {
+        res = await fetch('/api/finance/payroll', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify(payload)
         });
-        saveEmployees(updatedEmps);
+      }
+      
+      const data = await res.json();
+      
+      const savedEntry = { ...entry, id: data.id || editPayrollId || entry.id };
+      
+      if (editPayrollId) {
+        saveHistory(payrollHistory.map(p => p.id === editPayrollId ? savedEntry : p));
+      } else {
+        saveHistory([savedEntry, ...payrollHistory]);
+      }
+
+      if (advanceDed > 0 || editPayrollId) {
+        fetchEmployees();
       }
 
       if (shouldPrint) {
@@ -265,6 +283,7 @@ export default function SalaryPage() {
 
       showDialog({ title: "Success", message: `Salary of ${selectedMonth} ${selectedYear} processed successfully for ${selectedEmployee.name}.`, type: "success" });
       setSelectedEmployee(null);
+      setEditPayrollId(null);
     } catch(err) { console.error(err); }
   };
 
@@ -279,7 +298,7 @@ export default function SalaryPage() {
     }
 
     const entry = {
-      id: `PR-ADV-${Date.now()}`,
+      id: editPayrollId || `PR-ADV-${Date.now()}`,
       type: "Advance",
       employeeId: selectedEmployee.id,
       employeeName: selectedEmployee.name,
@@ -303,32 +322,75 @@ export default function SalaryPage() {
     };
 
     try {
-      const res = await fetch('/api/finance/payroll', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify(payload)
-      });
+      let res;
+      if (editPayrollId) {
+        res = await fetch(`/api/finance/payroll/${editPayrollId}`, {
+          method: 'PUT',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify(payload)
+        });
+      } else {
+        res = await fetch('/api/finance/payroll', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify(payload)
+        });
+      }
       const data = await res.json();
       
-      const savedEntry = { ...entry, id: data.id || entry.id };
-      saveHistory([savedEntry, ...payrollHistory]);
+      const savedEntry = { ...entry, id: data.id || editPayrollId || entry.id };
+      
+      if (editPayrollId) {
+        saveHistory(payrollHistory.map(p => p.id === editPayrollId ? savedEntry : p));
+      } else {
+        saveHistory([savedEntry, ...payrollHistory]);
+      }
 
-      const newBalance = (selectedEmployee.advanceBalance || 0) + amt;
-      await fetch(`/api/employees/${selectedEmployee.id}`, {
-        method: 'PUT',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({...selectedEmployee, advanceBalance: newBalance})
-      });
-      const updatedEmps = employees.map(emp => {
-        if (emp.id === selectedEmployee.id) {
-          return { ...emp, advanceBalance: newBalance };
-        }
-        return emp;
-      });
-      saveEmployees(updatedEmps);
-      showDialog({ title: "Success", message: `Advance of ₹${amt} for ${selectedMonth} ${selectedYear} paid to ${selectedEmployee.name}.`, type: "success" });
+      fetchEmployees();
+      showDialog({ title: "Success", message: `Advance of ₹${amt} for ${selectedMonth} ${selectedYear} ${editPayrollId ? 'updated for' : 'paid to'} ${selectedEmployee.name}.`, type: "success" });
       setSelectedEmployee(null);
+      setEditPayrollId(null);
     } catch(err) { console.error(err); }
+  };
+
+  const handleEditHistory = (h) => {
+    const emp = employees.find(e => e.id === h.employeeId);
+    if (!emp) return;
+    setEditPayrollId(h.id);
+    setSelectedEmployee(emp);
+    setActionType(h.type);
+    
+    if (h.type === "Salary") {
+      setSalForm({
+        paidDays: h.paidDays?.toString() || "",
+        lopDays: h.lopDays?.toString() || "",
+        basic: h.basic?.toString() || "",
+        otHours: h.otHours?.toString() || "",
+        otRate: h.otRate?.toString() || "",
+        advanceDeduction: h.advanceDeduction?.toString() || "",
+        otherDeductions: h.otherDeductions?.toString() || "",
+        method: h.method || "Bank Transfer",
+        paidOn: h.paidOn || today.toISOString().split("T")[0]
+      });
+    } else {
+      setAdvForm({
+        amount: h.amount?.toString() || "",
+        method: h.method || "Bank Transfer",
+        paidOn: h.paidOn || today.toISOString().split("T")[0]
+      });
+    }
+  };
+
+  const handleDeleteHistory = async (h) => {
+    if (!window.confirm("Are you sure you want to delete and reverse this entry? This will reflect in Accounts.")) return;
+    try {
+      await fetch(`/api/finance/payroll/${h.id}`, { method: 'DELETE' });
+      showDialog({ title: "Reversed", message: "Entry has been reversed successfully.", type: "success" });
+      fetchPayroll();
+      fetchEmployees();
+    } catch (e) {
+      console.error(e);
+    }
   };
 
   const salaryHistory = payrollHistory.filter(
@@ -346,7 +408,7 @@ export default function SalaryPage() {
     if (emp.salaryType === "Daily") {
       return salaryHistory.some((p) => p.employeeId === emp.id && p.paidOn === salForm.paidOn);
     }
-    return salaryHistory.some((p) => p.employeeId === emp.id);
+    return salaryHistory.some((p) => p.employeeId === emp.id && p.id !== editPayrollId);
   };
 
   // PDF + WHATSAPP HELPERS
@@ -386,7 +448,7 @@ export default function SalaryPage() {
     if (h.advanceDeduction > 0) deductions.push(["Advance Recovery", `- Rs. ${h.advanceDeduction.toLocaleString()}`]);
     if (h.otherDeductions > 0) deductions.push(["Other Deductions", `- Rs. ${h.otherDeductions.toLocaleString()}`]);
 
-    doc.autoTable({
+    autoTable(doc, {
       startY: 122,
       head: [["Earnings", "Amount"]],
       body: earnings,
@@ -398,7 +460,7 @@ export default function SalaryPage() {
     });
 
     if (deductions.length > 0) {
-      doc.autoTable({
+      autoTable(doc, {
         startY: doc.lastAutoTable.finalY + 8,
         head: [["Deductions", "Amount"]],
         body: deductions,
@@ -521,7 +583,8 @@ export default function SalaryPage() {
         <div className="xl:col-span-5 space-y-6 h-[calc(100vh-180px)] flex flex-col">
           
           {/* Employee Roster */}
-          <motion.div 
+          {!selectedEmployee && (
+            <motion.div 
             initial={{ opacity: 0, x: -20 }}
             animate={{ opacity: 1, x: 0 }}
             transition={{ delay: 0.1 }}
@@ -585,25 +648,26 @@ export default function SalaryPage() {
               </div>
             </div>
           </motion.div>
+          )}
 
           {/* Action Form */}
           <AnimatePresence mode="wait">
             {selectedEmployee && (
               <motion.div 
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, scale: 0.95 }}
-                className="themed-card rounded-[28px] overflow-hidden shrink-0 shadow-lg"
+                initial={{ opacity: 0, x: 20 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: 20 }}
+                className="themed-card rounded-[28px] overflow-hidden flex flex-col flex-1 shadow-lg"
               >
-                <div className="p-5 flex justify-between items-center border-b border-[var(--border-color)] themed-thead">
+                <div className="p-5 flex justify-between items-center border-b border-[var(--border-color)] themed-thead shrink-0">
                   <div>
                     <h3 className="font-black text-xl text-themed tracking-tight">{selectedEmployee.name}</h3>
                     <p className="text-violet-500 text-[10px] font-bold uppercase tracking-widest mt-1">
                       {selectedEmployee.salaryType} Wage
                     </p>
                   </div>
-                  <button onClick={() => setSelectedEmployee(null)} className="p-2 themed-card hover:border-[var(--border-color)] rounded-full text-muted hover:text-themed transition">
-                    <X size={18}/>
+                  <button onClick={() => { setSelectedEmployee(null); setEditPayrollId(null); }} className="flex items-center gap-1.5 px-3 py-1.5 themed-card border border-[var(--border-color)] hover:border-violet-500 rounded-lg text-muted hover:text-themed font-bold text-xs uppercase tracking-widest transition">
+                    <ChevronRight size={16} className="rotate-180"/> Back
                   </button>
                 </div>
 
@@ -637,20 +701,33 @@ export default function SalaryPage() {
                 {actionType === "Salary" && (
                   <motion.form 
                     initial={{ opacity: 0 }} animate={{ opacity: 1 }}
-                    onSubmit={handleProcessSalary} className="p-4 space-y-3 max-h-[42vh] overflow-y-auto no-scrollbar"
+                    onSubmit={handleProcessSalary} className="p-4 space-y-4 flex-1 overflow-y-auto custom-scrollbar"
                   >
-                    {alreadyPaidSalary(selectedEmployee) && (
+                    {!editPayrollId && alreadyPaidSalary(selectedEmployee) && (
                       <div className="mb-3 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 p-3 rounded-xl text-xs font-bold flex items-center gap-2">
                         <CheckCircle2 size={16}/> Salary already processed for {selectedEmployee.salaryType === "Daily" ? "this date" : "this month"}.
                       </div>
                     )}
+
+                    <div className="mb-3">
+                      <label className={labelClass}>Payroll Period</label>
+                      <input type="text" readOnly value={`${selectedMonth} ${selectedYear}`} className="w-full p-2.5 border border-[var(--border-color)] rounded-xl themed-input outline-none font-bold text-sm opacity-60 cursor-not-allowed" />
+                    </div>
                     
-                    <div className="grid grid-cols-2 gap-3 mb-3">
-                      <div>
+                    <div className="grid grid-cols-3 gap-3 mb-3">
+                      <div className={selectedEmployee.salaryType !== "Monthly" ? "col-span-1" : ""}>
                         <label className={labelClass}>Paid Days</label>
                         <input type="text" inputMode="numeric" pattern="^\d*$" className="w-full p-2 border border-[var(--border-color)] rounded-xl themed-input outline-none focus:border-violet-500 font-bold text-sm transition" value={salForm.paidDays} onChange={(e) => setSalForm({...salForm, paidDays: e.target.value.replace(/\D/g, '')})} />
                       </div>
-                      <div>
+                      
+                      {selectedEmployee.salaryType === "Monthly" && (
+                        <div>
+                          <label className={labelClass}>LOP Days</label>
+                          <input type="text" inputMode="numeric" pattern="^\d*$" className="w-full p-2 border border-red-500/30 text-red-500 rounded-xl themed-input outline-none focus:border-red-500 font-bold text-sm transition" value={salForm.lopDays} onChange={(e) => setSalForm({...salForm, lopDays: e.target.value.replace(/\D/g, '')})} placeholder="0" />
+                        </div>
+                      )}
+
+                      <div className={selectedEmployee.salaryType !== "Monthly" ? "col-span-2" : "col-span-1"}>
                         <label className={labelClass}>Basic (Editable)</label>
                         <div className="relative">
                           <span className="absolute left-3 top-2.5 text-slate-400 text-sm font-bold">₹</span>
@@ -695,19 +772,19 @@ export default function SalaryPage() {
                       <div className="flex gap-2 items-center">
                         <motion.button 
                           whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
-                          type="button" disabled={alreadyPaidSalary(selectedEmployee)} 
+                          type="button" disabled={!editPayrollId && alreadyPaidSalary(selectedEmployee)} 
                           onClick={(e) => handleProcessSalary(e, false)}
                           className="bg-[var(--bg-card)] border border-[var(--border-color)] hover:border-violet-500 disabled:opacity-50 disabled:cursor-not-allowed px-5 py-3 rounded-xl font-black text-xs uppercase tracking-widest flex items-center gap-2 transition text-themed shadow-sm"
                         >
-                          <CheckCircle2 size={16}/> Pay
+                          <CheckCircle2 size={16}/> {editPayrollId ? 'Update' : 'Pay'}
                         </motion.button>
                         <motion.button 
                           whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
-                          type="button" disabled={alreadyPaidSalary(selectedEmployee)} 
+                          type="button" disabled={!editPayrollId && alreadyPaidSalary(selectedEmployee)} 
                           onClick={(e) => handleProcessSalary(e, true)}
                           className="bg-violet-600 hover:bg-violet-500 disabled:opacity-50 disabled:cursor-not-allowed px-5 py-3 rounded-xl font-black text-xs uppercase tracking-widest flex items-center gap-2 transition shadow-[0_0_20px_rgba(139,92,246,0.3)] text-white"
                         >
-                          <Printer size={16}/> Pay & Print
+                          <Printer size={16}/> {editPayrollId ? 'Update & Print' : 'Pay & Print'}
                         </motion.button>
                       </div>
                     </div>
@@ -720,6 +797,10 @@ export default function SalaryPage() {
                     initial={{ opacity: 0 }} animate={{ opacity: 1 }}
                     onSubmit={handleGiveAdvance} className="p-4 space-y-3 no-scrollbar"
                   >
+                    <div className="mb-3">
+                      <label className={labelClass}>Payroll Period</label>
+                      <input type="text" readOnly value={`${selectedMonth} ${selectedYear}`} className="w-full p-2.5 border border-[var(--border-color)] rounded-xl themed-input outline-none font-bold text-sm opacity-60 cursor-not-allowed" />
+                    </div>
                     <div className="mb-3">
                       <label className={labelClass}>Advance Amount</label>
                       <div className="relative">
@@ -743,7 +824,7 @@ export default function SalaryPage() {
                       whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}
                       type="submit" className="w-full bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/50 text-amber-400 py-3 rounded-xl font-black text-xs uppercase tracking-widest transition shadow-[0_0_20px_rgba(245,158,11,0.2)]"
                     >
-                      Issue Advance
+                      {editPayrollId ? 'Update Advance' : 'Issue Advance'}
                     </motion.button>
                   </motion.form>
                 )}
@@ -825,22 +906,11 @@ export default function SalaryPage() {
                             <td className="px-4 py-4 text-right font-bold text-red-400">{(h.advanceDeduction + h.otherDeductions) > 0 ? `₹${(h.advanceDeduction + h.otherDeductions).toLocaleString()}` : "-"}</td>
                             <td className="px-6 py-4 text-right font-black text-emerald-400 text-lg">₹{h.netPay.toLocaleString()}</td>
                             <td className="px-4 py-4">
-                              <div className="flex items-center justify-center gap-2 opacity-60 group-hover:opacity-100 transition">
-                                <button
-                                  onClick={() => setViewPayslip(h)}
-                                  title="View Payslip"
-                                  className="p-2.5 bg-violet-500/10 hover:bg-violet-500/30 text-violet-400 rounded-xl transition"
-                                >
-                                  <Eye size={16} />
-                                </button>
-                                <button
-                                  onClick={() => sendWhatsApp(h, emp?.phone || "")}
-                                  title={emp?.phone ? `Send to ${emp.phone}` : "No phone on record"}
-                                  disabled={!emp?.phone}
-                                  className="p-2.5 bg-emerald-500/10 hover:bg-emerald-500/30 text-emerald-400 rounded-xl transition disabled:opacity-30 disabled:cursor-not-allowed"
-                                >
-                                  <MessageCircle size={16} />
-                                </button>
+                              <div className="flex items-center justify-end gap-1 opacity-60 group-hover:opacity-100 transition">
+                                <button onClick={() => setViewPayslip(h)} title="View Payslip" className="p-2 bg-violet-500/10 hover:bg-violet-500/30 text-violet-400 rounded-lg transition"><Eye size={14} /></button>
+                                <button onClick={() => sendWhatsApp(h, emp?.phone || "")} disabled={!emp?.phone} className="p-2 bg-emerald-500/10 hover:bg-emerald-500/30 text-emerald-400 rounded-lg transition disabled:opacity-30"><MessageCircle size={14} /></button>
+                                <button onClick={() => handleEditHistory(h)} title="Edit" className="p-2 bg-blue-500/10 hover:bg-blue-500/30 text-blue-400 rounded-lg transition"><Pencil size={14} /></button>
+                                <button onClick={() => handleDeleteHistory(h)} title="Delete / Reverse" className="p-2 bg-red-500/10 hover:bg-red-500/30 text-red-400 rounded-lg transition"><Trash2 size={14} /></button>
                               </div>
                             </td>
                           </motion.tr>
@@ -859,6 +929,7 @@ export default function SalaryPage() {
                       <th className="px-6 py-4">Employee</th>
                       <th className="px-6 py-4">Method</th>
                       <th className="px-6 py-4 text-right">Amount</th>
+                      <th className="px-4 py-4 text-center">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y themed-divider">
@@ -877,6 +948,12 @@ export default function SalaryPage() {
                             <span className="themed-card px-2 py-1 rounded-md">{h.method}</span>
                           </td>
                           <td className="px-6 py-5 text-right font-black text-amber-400 text-lg">₹{h.amount.toLocaleString()}</td>
+                          <td className="px-4 py-4">
+                            <div className="flex items-center justify-end gap-1 opacity-60 group-hover:opacity-100 transition">
+                              <button onClick={() => handleEditHistory(h)} title="Edit" className="p-2 bg-blue-500/10 hover:bg-blue-500/30 text-blue-400 rounded-lg transition"><Pencil size={14} /></button>
+                              <button onClick={() => handleDeleteHistory(h)} title="Delete / Reverse" className="p-2 bg-red-500/10 hover:bg-red-500/30 text-red-400 rounded-lg transition"><Trash2 size={14} /></button>
+                            </div>
+                          </td>
                         </motion.tr>
                       ))}
                     </AnimatePresence>

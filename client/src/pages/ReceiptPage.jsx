@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from "react";
 import { useReactToPrint } from "react-to-print";
 import { useLocation } from "react-router-dom";
-import { Receipt, Printer, History, User, Calendar, IndianRupee, Trash2, Save, ArrowLeft, Building, X, CheckCircle2, Search, MapPin } from "lucide-react";
+import { Receipt, Printer, History, User, Calendar, IndianRupee, Trash2, Save, ArrowLeft, Building, X, CheckCircle2, Search, MapPin, Pencil } from "lucide-react";
 import { useDialog } from "../contexts/DialogContext";
 import SearchableSelect from "../components/SearchableSelect";
 
@@ -23,15 +23,18 @@ export default function ReceiptPage() {
   const [receipts, setReceipts] = useState([]);
   const [selectedReceipts, setSelectedReceipts] = useState([]);
 
-  const getNewReceiptNumber = () => {
-    const lastNum = localStorage.getItem("lastReceiptNumber") || "1000";
-    const newNum = parseInt(lastNum) + 1;
-    const yearSuffix = "26-27";
-    return `MI/RCP/${newNum}/${yearSuffix}`;
+  const fetchNextNumber = async () => {
+    try {
+      const res = await fetch("/api/finance/receipts/next-number");
+      if (res.ok) {
+        const data = await res.json();
+        setFormData(prev => ({ ...prev, receiptNo: data.nextNumber }));
+      }
+    } catch (e) {}
   };
 
   const [formData, setFormData] = useState({
-    receiptNo: getNewReceiptNumber(),
+    receiptNo: "",
     date: new Date().toISOString().split("T")[0],
     siteId: "",
     clientName: "",
@@ -57,6 +60,7 @@ export default function ReceiptPage() {
       }
     };
     fetchSites();
+    fetchNextNumber();
   }, []);
 
   useEffect(() => {
@@ -132,22 +136,27 @@ export default function ReceiptPage() {
     const newReceipt = { 
       ...formData, 
       status: "Draft",
-      receiptNo: "DRAFT",
+      receiptNo: formData.receiptNo === "" ? "DRAFT" : formData.receiptNo,
       amountPaid: 0,
       siteId: formData.siteId ? formData.siteId.toString() : "",
       totalAmount: parseFloat(formData.totalAmount) || 0,
       remainingAmount: parseFloat(formData.totalAmount) || 0
     };
     try {
-      const res = await fetch('/api/finance/receipts', {
-        method: "POST",
+      const isEditing = !!formData.id;
+      const url = isEditing ? `/api/finance/receipts/${formData.id}` : '/api/finance/receipts';
+      const method = isEditing ? 'PUT' : 'POST';
+
+      const res = await fetch(url, {
+        method,
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(newReceipt)
       });
       if (res.ok) {
         const saved = await res.json();
-        setReceipts([{...newReceipt, id: saved.id}, ...receipts]);
-        showDialog({ title: "Saved as Draft", message: "Receipt draft saved successfully.", type: "success" });
+        const finalReceipt = {...newReceipt, id: formData.id || saved.id};
+        setReceipts(prev => isEditing ? prev.map(r => r.id === finalReceipt.id ? finalReceipt : r) : [finalReceipt, ...prev]);
+        showDialog({ title: isEditing ? "Draft Updated" : "Saved as Draft", message: isEditing ? "Draft updated successfully." : "Receipt draft saved successfully.", type: "success" });
         resetForm();
       }
     } catch(err) {
@@ -167,11 +176,6 @@ export default function ReceiptPage() {
     // Receipt generated fully
     let paid = total;
     let remaining = 0;
-    
-    const parts = formData.receiptNo.split("/");
-    if (parts.length >= 3) {
-      localStorage.setItem("lastReceiptNumber", parts[2]);
-    }
 
     const finalReceipt = {
       ...formData,
@@ -183,16 +187,19 @@ export default function ReceiptPage() {
     };
 
     try {
-      const res = await fetch('/api/finance/receipts', {
-        method: "POST",
+      const isEditing = !!formData.id;
+      const url = isEditing ? `/api/finance/receipts/${formData.id}` : '/api/finance/receipts';
+      const method = isEditing ? 'PUT' : 'POST';
+
+      const res = await fetch(url, {
+        method,
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(finalReceipt)
       });
       if (res.ok) {
         const saved = await res.json();
-        const storedReceipt = {...finalReceipt, id: saved.id};
-        setReceipts([storedReceipt, ...receipts]);
-        setIsModalOpen(false);
+        const storedReceipt = {...finalReceipt, id: formData.id || saved.id};
+        setReceipts(prev => isEditing ? prev.map(r => r.id === storedReceipt.id ? storedReceipt : r) : [storedReceipt, ...prev]);
         
         if (action === "print") {
           setPrintData([storedReceipt]);
@@ -200,9 +207,10 @@ export default function ReceiptPage() {
             handlePrintAction();
           }, 100);
         } else {
-          showDialog({ title: "Generated", message: "Receipt generated successfully.", type: "success" });
+          showDialog({ title: isEditing ? "Updated" : "Generated", message: isEditing ? "Receipt updated successfully." : "Receipt generated successfully.", type: "success" });
         }
         resetForm();
+        setShowHistory(true);
       }
     } catch(err) {
       console.error(err);
@@ -211,15 +219,34 @@ export default function ReceiptPage() {
   };
 
   const resetForm = () => {
+    fetchNextNumber();
     setFormData(prev => ({
       ...prev,
-      receiptNo: getNewReceiptNumber(),
+      id: undefined,
       date: new Date().toISOString().split("T")[0],
       totalAmount: "",
       category: "Advance Payment",
       comments: "",
       paymentMode: "Cash"
     }));
+  };
+
+  const handleEditReceipt = (receipt) => {
+    setFormData({
+      id: receipt.id,
+      receiptNo: receipt.receiptNo === "DRAFT" ? "" : receipt.receiptNo, // Will re-fetch or use draft if empty
+      date: receipt.date ? receipt.date.split("T")[0] : new Date().toISOString().split("T")[0],
+      siteId: receipt.siteId || "",
+      clientName: receipt.clientName || "",
+      totalAmount: receipt.totalAmount ? receipt.totalAmount.toString() : "",
+      category: receipt.category || "Advance Payment",
+      description: receipt.description || "",
+      comments: receipt.comments || "",
+      paymentMode: receipt.paymentMode || "Cash",
+      status: receipt.status
+    });
+    if (receipt.receiptNo === "DRAFT" || !receipt.receiptNo) fetchNextNumber();
+    setShowHistory(false);
   };
 
   const deleteReceipt = (id) => {
@@ -513,6 +540,7 @@ export default function ReceiptPage() {
                                <td className="px-4 py-3 text-right">
                                   <div className="flex justify-end gap-1.5">
                                     <button onClick={() => printPastReceipt(r)} className={`font-bold text-[9px] uppercase tracking-widest px-2 py-1 rounded-lg transition ${r.status === 'Draft' ? 'bg-[var(--accent-soft)] text-muted cursor-not-allowed opacity-50' : 'bg-[var(--accent)]/10 text-[var(--accent)] hover:bg-[var(--accent)]/20'}`}>Print</button>
+                                    <button onClick={() => handleEditReceipt(r)} className="text-indigo-500 hover:text-indigo-400 p-1 bg-indigo-500/10 hover:bg-indigo-500/20 rounded-lg transition"><Pencil size={14}/></button>
                                     <button onClick={() => deleteReceipt(r.id)} className="text-rose-500 hover:text-rose-400 p-1 bg-rose-500/10 hover:bg-rose-500/20 rounded-lg transition"><Trash2 size={14}/></button>
                                   </div>
                                </td>

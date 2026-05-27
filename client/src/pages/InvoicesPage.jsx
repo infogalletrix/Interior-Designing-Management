@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useDialog } from "../contexts/DialogContext";
+import NotificationWidget from "../components/NotificationWidget";
 
 // Removed getStatusInfo for invoices as requested
 
@@ -131,7 +132,7 @@ export default function HistoryPage() {
   return (
     <div className="p-4 md:p-6 page-wrapper">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5 relative z-50">
         <div>
           <h1 className="text-xl font-black text-themed flex items-center gap-2">
             <History className="text-[#C9A227]" size={18} /> Transaction History
@@ -139,27 +140,30 @@ export default function HistoryPage() {
           <p className="text-muted text-xs mt-0.5 font-medium">All invoices and quotations in one place.</p>
         </div>
         {/* Tab Buttons */}
-        <div className="flex gap-2">
-          <button
-            onClick={() => { setActiveTab("invoices"); setSearchTerm(""); }}
-            className={`flex items-center gap-2 px-5 py-2.5 rounded-xl font-black text-sm transition-all shadow-sm ${
-              activeTab === "invoices"
-                ? "bg-[#C9A227] text-white shadow-md"
-                : "bg-white/5 text-muted border border-[var(--border-color)] hover:bg-white/10"
-            }`}
-          >
-            <FileText size={16} /> Invoices
-          </button>
-          <button
-            onClick={() => { setActiveTab("quotations"); setSearchTerm(""); }}
-            className={`flex items-center gap-2 px-5 py-2.5 rounded-xl font-black text-sm transition-all shadow-sm ${
-              activeTab === "quotations"
-                ? "bg-amber-500 text-white shadow-amber-200 shadow-md"
-                : "bg-white/5 text-muted border border-[var(--border-color)] hover:bg-white/10"
-            }`}
-          >
-            <FileCheck size={16} /> Quotations
-          </button>
+        <div className="flex gap-3 items-center">
+          <div className="flex gap-2">
+            <button
+              onClick={() => { setActiveTab("invoices"); setSearchTerm(""); }}
+              className={`flex items-center gap-2 px-5 py-2.5 rounded-xl font-black text-sm transition-all shadow-sm ${
+                activeTab === "invoices"
+                  ? "bg-[#C9A227] text-white shadow-md"
+                  : "bg-white/5 text-muted border border-[var(--border-color)] hover:bg-white/10"
+              }`}
+            >
+              <FileText size={16} /> Invoices
+            </button>
+            <button
+              onClick={() => { setActiveTab("quotations"); setSearchTerm(""); }}
+              className={`flex items-center gap-2 px-5 py-2.5 rounded-xl font-black text-sm transition-all shadow-sm ${
+                activeTab === "quotations"
+                  ? "bg-amber-500 text-white shadow-amber-200 shadow-md"
+                  : "bg-white/5 text-muted border border-[var(--border-color)] hover:bg-white/10"
+              }`}
+            >
+              <FileCheck size={16} /> Quotations
+            </button>
+          </div>
+          <NotificationWidget />
         </div>
       </div>
 

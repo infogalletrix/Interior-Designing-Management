@@ -93,7 +93,7 @@ const Sidebar = ({ isOpen, toggleSidebar }) => {
           </div>
           {isOpen && (
             <div className="flex items-center gap-2">
-              <img src="/logo.png" alt="Mona Interior Studio" className="w-10 h-10 rounded-md object-cover shadow-sm bg-white" onError={(e) => { e.target.onerror = null; e.target.style.display = 'none'; }} />
+              <img src="/logo.png" alt="Mona Interior Studio" className="w-10 h-10 rounded-md object-cover shadow-sm" onError={(e) => { e.target.onerror = null; e.target.style.display = 'none'; }} />
               <div>
                 <h2 className={`text-base font-black whitespace-nowrap leading-tight ${ t.isDark ? "bg-gradient-to-r from-violet-400 to-indigo-400 bg-clip-text text-transparent" : "text-white"}`}>
                   Mona Interior

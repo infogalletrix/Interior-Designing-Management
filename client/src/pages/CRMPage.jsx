@@ -5,11 +5,12 @@ import {
   User, Briefcase, Calendar, Plus, Phone, MapPin, Search, DollarSign,
   TrendingUp, Activity, Star, CheckCircle, Clock, Mail, Tag, Percent,
   CheckSquare, BarChart2, Download, Filter, PieChart, Trash2, FileText,
-  AlertCircle
+  AlertCircle, List, Grid, Edit3
 } from "lucide-react";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import { useDialog } from "../contexts/DialogContext";
+import NotificationWidget from "../components/NotificationWidget";
 
 // Light Premium Modal
 function Modal({ open, onClose, children, size = "max-w-lg" }) {
@@ -30,6 +31,7 @@ const CRMPage = () => {
   const { showDialog } = useDialog();
   const [activeTab, setActiveTab] = useState("contacts");
   const [searchTerm, setSearchTerm] = useState("");
+  const [viewMode, setViewMode] = useState("list");
 
   const [contacts, setContacts] = useState([]);
   const [pipeline, setPipeline] = useState({
@@ -246,7 +248,7 @@ const CRMPage = () => {
 
       {/* HEADER & TABS */}
       <div className="flex flex-col mb-4 gap-3">
-        <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="flex flex-col lg:flex-row items-center justify-between gap-3 w-full">
+        <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="flex flex-col lg:flex-row items-center justify-between gap-3 w-full relative z-50">
           
           {/* TABS (Left) */}
           <div className="flex w-full md:w-auto gap-1 p-1 rounded-xl border border-[var(--border-color)] themed-card shadow-sm overflow-x-auto order-2 lg:order-1">
@@ -269,21 +271,22 @@ const CRMPage = () => {
           </div>
 
           {/* ADD BUTTON (Right) */}
-          <div className="flex w-full md:w-auto order-3">
+          <div className="flex w-full md:w-auto order-3 gap-3 items-center">
             <button onClick={() => { if (activeTab === "contacts") setEditContact({ status: 'Cold', tags: [] }); else if (activeTab === "deals") setEditDeal({ value: 0, contactId: contacts[0]?.id || '' }); else setEditActivity({ type: '', date: new Date().toISOString().split('T')[0], client: contacts[0]?.id || '', status: 'Pending' }); }} className="w-full md:w-auto flex-shrink-0 flex items-center justify-center gap-1.5 px-6 py-2.5 rounded-xl text-sm font-black transition-all duration-300 dark:bg-violet-700 bg-[#D4AF37] text-white shadow-lg dark:hover:bg-slate-800 hover:bg-[#c4a133]">
               <Plus size={16} /> <span className="hidden sm:inline">Add New</span>
             </button>
+            <NotificationWidget />
           </div>
 
         </motion.div>
       </div>
 
       {/* MAIN CONTENT AREA */}
-      <motion.div layout className="themed-card rounded-[2.5rem] shadow-2xl overflow-hidden min-h-[500px]">
+      <div className="themed-card rounded-[2.5rem] shadow-2xl min-h-[500px] overflow-visible">
         
         {/* SECTION: DEALS (KANBAN) */}
         {activeTab === "deals" && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="p-4 sm:p-5 overflow-x-auto w-full">
+          <div className="p-4 sm:p-5 overflow-x-auto w-full">
             <DragDropContext onDragEnd={onDragEnd}>
               <div className="flex flex-row gap-2 sm:gap-3 w-full min-w-[1200px]">
                 {Object.values(pipeline).map((column) => (
@@ -292,7 +295,30 @@ const CRMPage = () => {
                       <h3 className="text-[9px] sm:text-[10px] font-black text-slate-500 tracking-widest uppercase truncate">{column.title}</h3>
                       <span className="themed-card text-muted border border-[var(--border-color)] text-[10px] font-black px-2 py-0.5 rounded-md self-start xl:self-auto">{column.deals.length}</span>
                     </div>
-                    <Droppable droppableId={column.id}>
+                    <Droppable droppableId={column.id} renderClone={(provided, snapshot, rubric) => {
+                      const deal = column.deals[rubric.source.index];
+                      const contact = contacts.find((c) => c.id === deal.contactId);
+                      return (
+                        <div ref={provided.innerRef} {...provided.draggableProps} {...provided.dragHandleProps} style={{...provided.draggableProps.style, zIndex: 9999, margin: 0}} className="themed-card p-3 sm:p-4 rounded-xl border shadow-2xl border-violet-500/50 scale-[1.02] rotate-1 opacity-90">
+                          <div className="mb-2">
+                            <h4 className="font-black text-themed text-xs sm:text-sm leading-snug truncate">{deal.title}</h4>
+                          </div>
+                          <div className="flex items-center gap-2 mb-3">
+                            <div className="w-5 h-5 rounded-md bg-[var(--accent-soft)] text-[var(--accent)] flex items-center justify-center text-[9px] font-bold flex-shrink-0">
+                              {contact?.name.charAt(0).toUpperCase() || '?'}
+                            </div>
+                            <p className="text-[10px] sm:text-[11px] font-bold text-slate-400 truncate">{contact?.name || 'Unknown'}</p>
+                          </div>
+                          <div className="flex items-center gap-1.5 text-[10px] sm:text-[11px] font-bold text-slate-400 mb-4">
+                            <Phone size={12} className="text-slate-500" /> {contact?.phone || 'N/A'}
+                          </div>
+                          <div className="text-xs sm:text-sm font-black text-emerald-400 mb-3 bg-emerald-500/10 w-max px-2 py-0.5 rounded-md border border-emerald-500/20">₹{(deal.value/100000).toFixed(2)}L</div>
+                          <div className="pt-2 border-t border-[var(--border-color)] flex justify-between items-center">
+                            <span className="flex items-center gap-1 text-[9px] sm:text-[10px] font-bold text-slate-500 truncate"><Clock size={10} /> {new Date(deal.closeDate).toLocaleDateString('en-GB', {day:'numeric', month:'short'})}</span>
+                          </div>
+                        </div>
+                      );
+                    }}>
                       {(provided, snapshot) => (
                         <div {...provided.droppableProps} ref={provided.innerRef} className={`flex-1 min-h-[300px] rounded-[1rem] transition-colors ${snapshot.isDraggingOver ? "bg-violet-500/10 border-2 border-dashed border-violet-500/40 p-1" : ""}`}>
                           {column.deals.filter((d) => d.title.toLowerCase().includes(searchTerm.toLowerCase())).map((deal, index) => {
@@ -301,12 +327,14 @@ const CRMPage = () => {
                             return (
                               <Draggable key={deal.id} draggableId={deal.id} index={index}>
                                 {(provided, snapshot) => (
-                                  <div ref={provided.innerRef} {...provided.draggableProps} {...provided.dragHandleProps} className={`themed-card p-3 sm:p-4 rounded-xl border mb-3 transition-all ${snapshot.isDragging ? "shadow-2xl border-violet-500/50 scale-[1.02] rotate-1" : "shadow-sm hover:border-violet-500/30 hover:shadow-md hover:-translate-y-1"}`}>
+                                  <div ref={provided.innerRef} {...provided.draggableProps} {...provided.dragHandleProps} style={{...provided.draggableProps.style, zIndex: snapshot.isDragging ? 9999 : "auto"}} className={`themed-card p-3 sm:p-4 rounded-xl border mb-3 ${snapshot.isDragging ? "shadow-2xl border-violet-500/50 scale-[1.02] rotate-1 opacity-90" : "shadow-sm hover:border-violet-500/30 hover:shadow-md hover:-translate-y-1 transition-all"}`}>
                                     <div className="mb-2">
                                       <h4 className="font-black text-themed text-xs sm:text-sm leading-snug truncate">{deal.title}</h4>
                                     </div>
                                     <div className="flex items-center gap-2 mb-3">
-                                      <div className="w-5 h-5 rounded-md dark:bg-violet-600 bg-[#D4AF37] flex items-center justify-center text-[9px] font-bold text-white flex-shrink-0">{contact?.name.charAt(0) || '?'}</div>
+                                      <div className="w-5 h-5 rounded-md bg-[var(--accent-soft)] text-[var(--accent)] flex items-center justify-center text-[9px] font-bold flex-shrink-0">
+                                        {contact?.name.charAt(0).toUpperCase() || '?'}
+                                      </div>
                                       <p className="text-[10px] sm:text-[11px] font-bold text-slate-400 truncate">{contact?.name || 'Unknown'}</p>
                                     </div>
                                     <div className="flex items-center gap-1.5 text-[10px] sm:text-[11px] font-bold text-slate-400 mb-4">
@@ -334,61 +362,152 @@ const CRMPage = () => {
                 ))}
               </div>
             </DragDropContext>
-          </motion.div>
+          </div>
         )}
 
         {/* SECTION: CLIENTS */}
         {activeTab === "contacts" && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="overflow-x-auto">
-            <div className="flex justify-between items-center p-6 themed-thead border-b border-[var(--border-color)]">
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="overflow-x-auto bg-transparent">
+            <div className="flex justify-between items-center p-6 border-b border-[var(--border-color)]">
               <h2 className="text-lg font-black text-themed">Client Directory</h2>
-              <button onClick={exportContactsToPDF} className="flex items-center gap-2 themed-card text-muted px-4 py-2 rounded-xl text-sm font-bold hover:bg-violet-600/20 transition-colors"><Download size={16}/> Export PDF</button>
+              <div className="flex items-center gap-3">
+                <div className="flex bg-[var(--bg-surface)] p-1 rounded-xl border border-[var(--border-color)]">
+                  <button onClick={() => setViewMode("list")} className={`p-1.5 rounded-lg transition-colors ${viewMode === "list" ? "bg-[var(--accent)] text-white shadow-sm" : "text-muted hover:text-themed"}`} title="List View"><List size={16}/></button>
+                  <button onClick={() => setViewMode("card")} className={`p-1.5 rounded-lg transition-colors ${viewMode === "card" ? "bg-[var(--accent)] text-white shadow-sm" : "text-muted hover:text-themed"}`} title="Card View"><Grid size={16}/></button>
+                </div>
+                <button onClick={exportContactsToPDF} className="flex items-center gap-2 themed-card text-muted px-4 py-2 rounded-xl text-sm font-bold hover:opacity-80 transition-colors border border-[var(--border-color)]"><Download size={16}/> <span className="hidden sm:inline">Export PDF</span></button>
+              </div>
             </div>
-            <table className="w-full text-left border-collapse">
-              <thead className="themed-thead border-b border-[var(--border-color)]">
-                <tr className="text-slate-500 text-[10px] font-black uppercase tracking-widest">
-                  <th className="p-5 pl-8">Client Profile</th>
-                  <th className="p-5">Project Focus</th>
-                  <th className="p-5">Tags / Source</th>
-                  <th className="p-5">Contact Details</th>
-                  <th className="p-5 pr-8 text-right">Actions</th>
+            
+            {viewMode === "list" ? (
+            <table className="w-full text-left border-collapse" style={{background: 'transparent'}}>
+              <thead>
+                <tr className="border-b border-[var(--border-color)] text-[10px] font-black uppercase tracking-widest" style={{color: 'var(--text-muted)', background: 'transparent'}}>
+                  <th className="py-4 pl-8 pr-4">Client Profile</th>
+                  <th className="py-4 px-4">Project Focus</th>
+                  <th className="py-4 px-4">Tags / Source</th>
+                  <th className="py-4 px-4">Contact Details</th>
+                  <th className="py-4 pr-8 pl-4 text-right">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y themed-divider">
+              <tbody>
                 {filteredContacts.map((c) => (
-                  <tr key={c.id} className="themed-row transition-colors group">
-                    <td className="p-5 pl-8">
-                      <div className="flex items-center gap-4">
-                        <img src={`https://ui-avatars.com/api/?name=${encodeURIComponent(c.name)}&background=292524&color=fff&rounded=xl&bold=true`} alt={c.name} className="w-10 h-10 rounded-xl shadow-sm"/>
+                  <tr key={c.id} className="border-b border-[var(--border-color)] group transition-colors" style={{background: 'transparent'}}>
+                    <td className="py-4 pl-8 pr-4">
+                      <div className="flex items-center gap-3">
+                        <div className="w-9 h-9 rounded-xl flex items-center justify-center text-sm font-black shadow-sm flex-shrink-0"
+                          style={{background: 'var(--accent-soft)', color: 'var(--accent)'}}>
+                          {c.name.charAt(0).toUpperCase()}
+                        </div>
                         <div>
-                          <div className="font-black text-themed">{c.name}</div>
-                          <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">ID: {c.id}</div>
+                          <div className="font-black" style={{color: 'var(--text-primary)'}}>{c.name}</div>
+                          <div className="text-[10px] font-semibold uppercase tracking-wider" style={{color: 'var(--text-muted)'}}>ID: {c.id}</div>
                         </div>
                       </div>
                     </td>
-                    <td className="p-5">
-                      <span className="bg-white/5 text-slate-300 px-3 py-1.5 rounded-lg text-xs font-bold border border-white/10">{c.project}</span>
+                    <td className="py-4 px-4">
+                      <span className="px-3 py-1 rounded-lg text-xs font-bold border" style={{borderColor: 'var(--border-color)', color: 'var(--text-secondary)', background: 'var(--bg-surface)'}}>{c.project}</span>
                     </td>
-                    <td className="p-5">
-                      <div className="flex flex-wrap gap-1.5 mb-1">
-                        {c.tags?.map(t => <span key={t} className="themed-card text-muted text-[9px] font-black uppercase px-2 py-0.5 rounded"><Tag size={8} className="inline mr-1"/>{t}</span>)}
+                    <td className="py-4 px-4">
+                      <div className="flex flex-wrap gap-1 mb-1">
+                        {c.tags?.map(t => (
+                          <span key={t} className="text-[9px] font-black uppercase px-2 py-0.5 rounded"
+                            style={{border: '1px solid var(--border-color)', color: 'var(--text-muted)'}}>
+                            <Tag size={7} className="inline mr-0.5"/>{t}
+                          </span>
+                        ))}
                       </div>
-                      <div className="text-[10px] text-slate-400 font-bold flex items-center gap-1"><Filter size={10}/> {c.source || 'Unknown'}</div>
+                      <div className="text-[10px] font-bold flex items-center gap-1" style={{color: 'var(--text-muted)'}}><Filter size={9}/> {c.source || 'Unknown'}</div>
                     </td>
-                    <td className="p-5 text-slate-400 text-xs font-medium space-y-1">
-                      <div className="flex items-center gap-2"><Phone size={12} className="text-slate-500" /> {c.phone}</div>
-                      <div className="flex items-center gap-2"><Mail size={12} className="text-slate-500" /> {c.email || 'N/A'}</div>
+                    <td className="py-4 px-4 text-xs font-medium space-y-1" style={{color: 'var(--text-muted)'}}>
+                      <div className="flex items-center gap-2"><Phone size={11} style={{color: 'var(--text-muted)'}} /> {c.phone}</div>
+                      <div className="flex items-center gap-2"><Mail size={11} style={{color: 'var(--text-muted)'}} /> {c.email || 'N/A'}</div>
                     </td>
-                    <td className="p-5 pr-8 text-right">
+                    <td className="py-4 pr-8 pl-4 text-right">
                       <div className="flex justify-end items-center gap-2">
-                        <button className="text-slate-400 hover:text-white font-bold px-3 py-1.5 rounded-lg hover:bg-white/10 transition-colors text-xs" onClick={() => setEditContact(c)}>Edit</button>
-                        <button className="text-red-400 hover:text-red-300 font-bold px-2 py-1.5 rounded-lg bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 transition-colors text-xs" onClick={() => deleteContact(c.id)}><Trash2 size={14}/></button>
+                        <button
+                          className="font-bold px-3 py-1.5 rounded-lg text-xs transition-all opacity-0 group-hover:opacity-100"
+                          style={{color: 'var(--text-muted)', border: '1px solid var(--border-color)', background: 'var(--bg-surface)'}}
+                          onClick={() => setEditContact(c)}>Edit</button>
+                        <button
+                          className="font-bold px-2 py-1.5 rounded-lg text-xs transition-all opacity-0 group-hover:opacity-100"
+                          style={{color: '#f87171', background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)'}}
+                          onClick={() => deleteContact(c.id)}><Trash2 size={13}/></button>
                       </div>
                     </td>
                   </tr>
                 ))}
               </tbody>
             </table>
+            ) : (
+            <div className="p-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4" style={{background: 'transparent'}}>
+              {filteredContacts.map((c) => (
+                <div key={c.id} className="group relative p-5 rounded-2xl border transition-all hover:-translate-y-0.5 hover:shadow-lg"
+                  style={{background: 'var(--bg-card)', borderColor: 'var(--border-color)'}}>
+                  {/* Accent top strip on hover */}
+                  <div className="absolute inset-x-0 top-0 h-0.5 rounded-t-2xl opacity-0 group-hover:opacity-100 transition-opacity"
+                    style={{background: 'linear-gradient(90deg, var(--accent), var(--accent-hover))'}} />
+
+                  <div className="flex justify-between items-start mb-4">
+                    <div className="flex items-center gap-3">
+                      <div className="w-11 h-11 rounded-xl flex items-center justify-center text-lg font-black shadow-sm flex-shrink-0"
+                        style={{background: 'var(--accent-soft)', color: 'var(--accent)'}}>
+                        {c.name.charAt(0).toUpperCase()}
+                      </div>
+                      <div>
+                        <div className="font-black text-base" style={{color: 'var(--text-primary)'}}>{c.name}</div>
+                        <div className="text-[10px] font-semibold uppercase tracking-wider" style={{color: 'var(--text-muted)'}}>ID: {c.id}</div>
+                      </div>
+                    </div>
+                    <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <button
+                        className="p-1.5 rounded-lg transition-colors"
+                        style={{color: 'var(--text-muted)'}}
+                        onMouseOver={e => e.currentTarget.style.background='var(--bg-surface)'}
+                        onMouseOut={e => e.currentTarget.style.background='transparent'}
+                        onClick={() => setEditContact(c)}><Edit3 size={14}/></button>
+                      <button
+                        className="p-1.5 rounded-lg transition-colors"
+                        style={{color: '#f87171'}}
+                        onMouseOver={e => e.currentTarget.style.background='rgba(239,68,68,0.1)'}
+                        onMouseOut={e => e.currentTarget.style.background='transparent'}
+                        onClick={() => deleteContact(c.id)}><Trash2 size={14}/></button>
+                    </div>
+                  </div>
+
+                  <div className="mb-4">
+                    <span className="px-2.5 py-1 rounded-lg text-xs font-bold inline-block mb-2"
+                      style={{border: '1px solid var(--border-color)', color: 'var(--text-secondary)', background: 'var(--bg-surface)'}}>
+                      {c.project}
+                    </span>
+                    <div className="flex flex-wrap gap-1">
+                      {c.tags?.map(t => (
+                        <span key={t} className="text-[9px] font-black uppercase px-2 py-0.5 rounded"
+                          style={{background: 'var(--accent-soft)', color: 'var(--accent)', border: '1px solid transparent'}}>
+                          <Tag size={7} className="inline mr-0.5"/>{t}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="pt-3 space-y-2" style={{borderTop: '1px solid var(--border-color)'}}>
+                    <div className="flex items-center justify-between">
+                      <div className="text-[10px] font-bold flex items-center gap-1.5" style={{color: 'var(--text-muted)'}}><Filter size={10}/> Source</div>
+                      <div className="text-xs font-bold" style={{color: 'var(--text-primary)'}}>{c.source || 'Unknown'}</div>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <div className="text-[10px] font-bold flex items-center gap-1.5" style={{color: 'var(--text-muted)'}}><Phone size={10}/> Phone</div>
+                      <div className="text-xs font-bold" style={{color: 'var(--text-primary)'}}>{c.phone}</div>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <div className="text-[10px] font-bold flex items-center gap-1.5" style={{color: 'var(--text-muted)'}}><Mail size={10}/> Email</div>
+                      <div className="text-xs font-bold truncate max-w-[140px]" style={{color: 'var(--text-primary)'}}>{c.email || 'N/A'}</div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+            )}
           </motion.div>
         )}
 
@@ -532,7 +651,7 @@ const CRMPage = () => {
           </motion.div>
         )}
 
-      </motion.div>
+      </div>
 
       {/* FEEDBACK TOAST */}
       <AnimatePresence>
@@ -599,7 +718,7 @@ function EditContactForm({ contact, onSave, onCancel }) {
         <div className="md:col-span-2">
           {/* Replaced fixed select with input + datalist so ANY lead source can be entered */}
           <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1.5 block">Lead Source</label>
-          <input list="lead-sources" placeholder="e.g. Instagram" className="w-full bg-black/20 border border-white/10 rounded-xl p-3 text-sm text-white font-bold focus:ring-2 focus:ring-stone-900 outline-none transition-all" value={form.source} onChange={e => setForm({ ...form, source: e.target.value })} />
+          <input list="lead-sources" placeholder="e.g. Instagram" className="themed-input w-full border border-[var(--border-color)] rounded-xl p-3 text-sm font-bold outline-none focus:border-violet-500 transition-all" value={form.source} onChange={e => setForm({ ...form, source: e.target.value })} />
           <datalist id="lead-sources">
             <option value="Instagram" />
             <option value="Website" />

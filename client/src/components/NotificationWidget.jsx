@@ -7,7 +7,7 @@ const defaultNotifications = {
   maintenance: []
 };
 
-export default function NotificationWidget() {
+export default function NotificationWidget({ compact = false }) {
   const [isOpen, setIsOpen] = useState(false);
   const [activeTab, setActiveTab] = useState("reminders");
   const [notifications, setNotifications] = useState(defaultNotifications);
@@ -111,15 +111,15 @@ export default function NotificationWidget() {
   };
 
   return (
-    <div className="fixed top-4 right-6 z-50" ref={dropdownRef}>
+    <div className="relative" ref={dropdownRef}>
       {/* Bell Button */}
       <button 
         onClick={toggleOpen}
-        className={`relative p-2.5 rounded-xl transition-all duration-300 shadow-sm ${t.isDark ? 'bg-slate-800/80 hover:bg-slate-700 text-slate-300 border border-white/10' : 'bg-white hover:bg-slate-50 text-slate-700 border border-slate-200'}`}
+        className={`relative ${compact ? 'p-1.5 rounded-lg' : 'p-2.5 rounded-xl'} transition-all duration-300 shadow-sm ${t.isDark ? 'bg-slate-800/80 hover:bg-slate-700 text-slate-300 border border-white/10' : 'bg-white hover:bg-slate-50 text-slate-700 border border-slate-200'}`}
       >
-        <Bell size={20} className={isOpen ? "animate-pulse" : ""} />
+        <Bell size={compact ? 16 : 20} className={isOpen ? "animate-pulse" : ""} />
         {unreadCount > 0 && (
-          <span className="absolute -top-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full bg-rose-500 text-[10px] font-black text-white border-2 border-[var(--bg-surface)]">
+          <span className={`absolute -top-1 -right-1 flex ${compact ? 'h-4 w-4 text-[8px]' : 'h-5 w-5 text-[10px]'} items-center justify-center rounded-full bg-rose-500 font-black text-white border-2 border-[var(--bg-surface)]`}>
             {unreadCount}
           </span>
         )}
@@ -127,7 +127,7 @@ export default function NotificationWidget() {
 
       {/* Dropdown */}
       {isOpen && (
-        <div className={`absolute right-0 mt-3 w-80 md:w-96 rounded-3xl shadow-2xl overflow-hidden transform transition-all duration-300 origin-top-right border ${t.isDark ? 'bg-slate-900/95 backdrop-blur-xl border-white/10' : 'bg-white/95 backdrop-blur-xl border-slate-200 shadow-slate-200'}`}>
+        <div className={`absolute right-0 mt-3 w-80 md:w-96 rounded-3xl shadow-2xl overflow-hidden transform transition-all duration-300 origin-top-right border z-[100] ${t.isDark ? 'bg-slate-900/95 backdrop-blur-xl border-white/10' : 'bg-white/95 backdrop-blur-xl border-slate-200 shadow-slate-200'}`}>
           {/* Header */}
           <div className={`p-4 border-b flex justify-between items-center ${t.isDark ? 'border-white/10 bg-white/5' : 'border-slate-100 bg-slate-50'}`}>
             <h3 className="font-black text-sm tracking-tight flex items-center gap-2">

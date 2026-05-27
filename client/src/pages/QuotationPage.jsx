@@ -15,6 +15,7 @@ import {
   Edit,
 } from "lucide-react";
 import { useDialog } from "../contexts/DialogContext";
+import NotificationWidget from "../components/NotificationWidget";
 
 export default function QuotationPage() {
   const { showDialog } = useDialog();
@@ -185,6 +186,13 @@ export default function QuotationPage() {
       e.preventDefault();
       if (idx === items.length - 1) {
         addNewRow();
+        setTimeout(() => {
+          const nextInput = document.getElementById(`input-${idx + 1}-description`);
+          if (nextInput) nextInput.focus();
+        }, 50);
+      } else {
+        const nextInput = document.getElementById(`input-${idx + 1}-${field}`);
+        if (nextInput) nextInput.focus();
       }
     } else if (e.key === "ArrowDown") {
       e.preventDefault();
@@ -229,7 +237,14 @@ export default function QuotationPage() {
     ]);
   };
 
-  const removeItem = (id) => setItems(items.filter((i) => i.id !== id));
+  const removeItem = (id) => {
+    const idx = items.findIndex(i => i.id === id);
+    if (idx === 0) {
+      setItems(prev => prev.map(item => item.id === id ? { ...item, description: "", area: "", rate: "", amount: 0 } : item));
+    } else {
+      setItems(items.filter((i) => i.id !== id));
+    }
+  };
 
   const subTotal = items.reduce((s, i) => s + i.amount, 0);
   const totalArea = items.reduce(
@@ -335,6 +350,7 @@ export default function QuotationPage() {
     navigate("/sites", {
       state: {
         convertQuote: {
+          id: quoteId,
           clientName,
           organizationName,
           clientAddress,
@@ -363,47 +379,52 @@ export default function QuotationPage() {
   return (
     <div className="page-wrapper min-h-screen font-sans flex flex-col">
       {/* Sessions Tab Bar */}
-      <div className="bg-slate-800 px-2 pt-2 flex items-center gap-1 overflow-x-auto no-scrollbar border-b border-slate-700">
-        {sessions.map(s => (
-          <div
-            key={s.id}
-            onClick={() => setActiveSessionId(s.id)}
-            className={`flex items-center gap-2 px-3 py-1.5 rounded-t-lg text-[10px] font-bold uppercase tracking-wider cursor-pointer transition-all ${
-              activeSessionId === s.id 
-              ? "bg-gray-200 text-slate-800 shadow-[0_-2px_10px_rgba(0,0,0,0.2)]" 
-              : "bg-slate-700 text-slate-400 hover:bg-slate-600 hover:text-white"
-            }`}
-          >
-            <FileText size={12} className={activeSessionId === s.id ? "text-amber-600" : "text-slate-500"} />
-            <span className="max-w-[100px] truncate">{s.title}</span>
-            <button 
-              onClick={(e) => closeSession(s.id, e)}
-              className={`p-0.5 rounded-full hover:bg-black/10 transition ${activeSessionId === s.id ? "text-slate-400 hover:text-red-500" : "text-slate-500 hover:text-white"}`}
+      <div className="bg-[var(--bg-surface)] px-2 pt-2 flex items-center justify-between border-b border-[var(--border-color)] relative z-50">
+        <div className="flex items-center gap-1 overflow-x-auto no-scrollbar flex-1">
+          {sessions.map(s => (
+            <div
+              key={s.id}
+              onClick={() => setActiveSessionId(s.id)}
+              className={`flex items-center gap-2 px-3 py-1.5 rounded-t-lg text-[10px] font-bold uppercase tracking-wider cursor-pointer transition-all ${
+                activeSessionId === s.id 
+                ? "bg-[var(--bg-card)] text-[var(--text-primary)] border border-b-0 border-[var(--border-color)] shadow-sm" 
+                : "bg-[var(--bg-surface)] text-[var(--text-muted)] hover:bg-[var(--bg-card-hover)] hover:text-[var(--text-primary)]"
+              }`}
             >
-              <X size={10} />
-            </button>
-          </div>
-        ))}
-        <button 
-          onClick={createNewSession}
-          className="p-1.5 text-amber-400 hover:text-amber-300 transition hover:bg-white/5 rounded-full mb-1"
-          title="New Quotation Session"
-        >
-          <Plus size={16} strokeWidth={3} />
-        </button>
+              <FileText size={12} className={activeSessionId === s.id ? "text-[var(--accent)]" : "opacity-40"} />
+              <span className="max-w-[100px] truncate">{s.title}</span>
+              <button 
+                onClick={(e) => closeSession(s.id, e)}
+                className={`p-0.5 rounded-full hover:bg-black/10 transition ${activeSessionId === s.id ? "text-slate-400 hover:text-red-500" : "text-slate-500 hover:text-white"}`}
+              >
+                <X size={10} />
+              </button>
+            </div>
+          ))}
+          <button 
+            onClick={createNewSession}
+            className="p-1.5 text-[var(--accent)] hover:opacity-70 transition hover:bg-[var(--accent-soft)] rounded-full mb-1"
+            title="New Quotation Session"
+          >
+            <Plus size={16} strokeWidth={3} />
+          </button>
+        </div>
+        <div className="pb-1 pl-2 shrink-0">
+          <NotificationWidget compact={true} />
+        </div>
       </div>
       {/* ── TOP INFO BAR ── */}
       <div className="themed-card p-2 grid grid-cols-12 gap-2 border-b border-[var(--border-color)] items-end">
         <div className="col-span-2">
           <label className="block text-[10px] font-bold text-muted uppercase">Quotation Number</label>
           <input disabled value={quoteNo}
-            className="w-full bg-amber-500/10 border border-amber-500/20 text-amber-400 px-2 py-1 text-sm font-bold outline-none" />
+            className="w-full bg-[var(--accent-soft)] border border-[var(--accent)]/30 text-amber-800 dark:text-[var(--accent)] px-2 py-1 text-sm font-bold outline-none rounded" />
         </div>
 
         <div className="col-span-2">
           <label className="block text-[10px] font-bold text-muted uppercase">Date</label>
           <input disabled value={quoteDate}
-            className="w-full bg-amber-500/10 border border-amber-500/20 text-amber-400 px-2 py-1 text-sm font-bold" />
+            className="w-full bg-[var(--accent-soft)] border border-[var(--accent)]/30 text-amber-800 dark:text-[var(--accent)] px-2 py-1 text-sm font-bold rounded" />
         </div>
 
         {/* Bill Type Toggle */}
@@ -412,7 +433,7 @@ export default function QuotationPage() {
           <div className="flex bg-white/10 rounded p-0.5 gap-0.5">
             <button
               onClick={() => setBillType("GST")}
-              className={`flex-1 py-1 text-[10px] font-black uppercase rounded transition ${billType === "GST" ? "bg-[#C9A227] text-white" : "text-slate-500 hover:text-slate-700"}`}
+              className={`flex-1 py-1 text-[10px] font-black uppercase rounded transition ${billType === "GST" ? "bg-amber-600 text-white" : "text-slate-500 hover:text-slate-700"}`}
             >GST</button>
             <button
               onClick={() => setBillType("Non-GST")}
@@ -480,13 +501,13 @@ export default function QuotationPage() {
             placeholder="e.g. 3BHK Apartment Interior" 
             value={projectTitle}
             onChange={(e) => setProjectTitle(e.target.value)}
-            className="w-full themed-input border border-[var(--border-color)] px-2 py-1 text-sm outline-none focus:border-amber-400 font-bold" 
+            className="w-full themed-input border border-[var(--border-color)] px-2 py-1 text-sm outline-none focus:border-amber-500 font-bold" 
           />
         </div>
 
         <div className="col-span-2 flex flex-col items-end justify-end pb-0.5">
-          <span className="text-[9px] font-bold text-amber-400 uppercase tracking-widest">Sub Total</span>
-          <span className="text-sm font-black text-amber-300">₹{subTotal.toLocaleString()}</span>
+          <span className="text-[9px] font-bold text-amber-700 dark:text-[var(--accent)] uppercase tracking-widest">Sub Total</span>
+          <span className="text-sm font-black text-amber-700 dark:text-[var(--accent)]">₹{subTotal.toLocaleString()}</span>
         </div>
       </div>
 
@@ -525,7 +546,7 @@ export default function QuotationPage() {
                     <button
                       onClick={() => removeItem(item.id)}
                       className="text-red-400 hover:text-red-600 p-1"
-                      title="Remove Row"
+                      title={idx === 0 ? "Clear Row" : "Remove Row"}
                     >
                       <Trash2 size={14} />
                     </button>
@@ -585,7 +606,7 @@ export default function QuotationPage() {
                     className="w-full bg-transparent border-none outline-none text-right text-themed px-1"
                   />
                 </td>
-                <td className="px-2 py-2 text-right font-black text-amber-400">
+                <td className="px-2 py-2 text-right font-black text-amber-700 dark:text-[var(--accent)]">
                   {(item.amount || 0).toFixed(2)}
                 </td>
               </tr>
@@ -605,7 +626,7 @@ export default function QuotationPage() {
         <div className="p-2 border-b border-[var(--border-color)] flex justify-center">
           <button 
             onClick={addNewRow}
-            className="flex items-center gap-2 px-4 py-1.5 bg-amber-500/10 text-amber-400 rounded-lg font-bold text-xs hover:bg-amber-500/20 transition-all border border-amber-500/20"
+            className="flex items-center gap-2 px-4 py-1.5 bg-[var(--accent-soft)] text-amber-800 dark:text-[var(--accent)] rounded-lg font-bold text-xs hover:opacity-80 transition-all border border-[var(--accent)]/30"
           >
             <Plus size={14} strokeWidth={3} /> Add Row
           </button>
@@ -613,25 +634,25 @@ export default function QuotationPage() {
       </div>
 
       {/* ── FOOTER ── */}
-      <div className="bg-white/5 p-2 border-t border-gray-300 flex justify-between items-center gap-4">
+      <div className="bg-[var(--bg-surface)] p-2 border-t border-[var(--border-color)] flex justify-between items-center gap-4">
         {/* Stats */}
         <div className="flex gap-4">
-          <div className="bg-amber-500/10 border border-amber-500/20 px-3 py-1 flex gap-2 items-center">
-            <span className="text-[10px] font-bold text-amber-400 uppercase">Total Items:</span>
-            <span className="text-sm font-bold text-amber-300">{items.length}</span>
+          <div className="bg-[var(--accent-soft)] border border-[var(--accent)]/30 px-3 py-1 flex gap-2 items-center rounded">
+            <span className="text-[10px] font-bold text-amber-800 dark:text-[var(--accent)] uppercase">Total Items:</span>
+            <span className="text-sm font-bold text-[var(--text-primary)]">{items.length}</span>
           </div>
-          <div className="bg-amber-500/10 border border-amber-500/20 px-3 py-1 flex gap-2 items-center">
-            <span className="text-[10px] font-bold text-amber-400 uppercase">Total Area:</span>
-            <span className="text-sm font-bold text-amber-300">{totalArea.toFixed(1)} Sq.Ft</span>
+          <div className="bg-[var(--accent-soft)] border border-[var(--accent)]/30 px-3 py-1 flex gap-2 items-center rounded">
+            <span className="text-[10px] font-bold text-amber-800 dark:text-[var(--accent)] uppercase">Total Area:</span>
+            <span className="text-sm font-bold text-[var(--text-primary)]">{totalArea.toFixed(1)} Sq.Ft</span>
           </div>
         </div>
 
         {/* Grand Total */}
         <div className="flex items-center gap-4">
-          <div className="text-4xl text-slate-400 font-light">₹</div>
+          <div className="text-4xl text-amber-700 dark:text-[var(--accent)] font-light">₹</div>
           <div className="themed-card border border-[var(--border-color)] px-10 py-2 rounded shadow-inner text-right min-w-[200px]">
-            <div className="text-[10px] font-bold text-amber-400 uppercase -mb-1">Estimated Total</div>
-            <div className="text-5xl font-black text-amber-300 tracking-tighter">{subTotal.toFixed(2)}</div>
+            <div className="text-[10px] font-bold text-amber-700 dark:text-[var(--accent)] uppercase -mb-1">Estimated Total</div>
+            <div className="text-5xl font-black text-amber-700 dark:text-[var(--accent)] tracking-tighter">{subTotal.toFixed(2)}</div>
             {billType === 'GST' && (<div className="text-[9px] font-black uppercase mt-0.5 text-muted">Exclusive of GST</div>)}
           </div>
         </div>
@@ -641,7 +662,7 @@ export default function QuotationPage() {
       <div className="bg-[var(--bg-surface)] p-1 flex justify-center gap-1 border-t border-[var(--border-color)]">
         <button
           onClick={clearForm}
-          className="bg-[#D4AF37] hover:bg-[#c4a133] text-white px-4 py-1.5 rounded flex items-center gap-2 text-xs font-bold transition shadow-sm"
+          className="bg-amber-600 hover:bg-amber-700 text-white px-4 py-1.5 rounded flex items-center gap-2 text-xs font-bold transition shadow-sm"
         >
           <RotateCcw size={14} /> Clear
         </button>

@@ -17,6 +17,7 @@ import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import * as XLSX from "xlsx";
 import { useDialog } from "../contexts/DialogContext";
+import NotificationWidget from "../components/NotificationWidget";
 
 export default function AttendancePage() {
   const { showDialog } = useDialog();
@@ -355,7 +356,7 @@ export default function AttendancePage() {
   return (
     <div className="p-4 md:p-6 page-wrapper">
       {/* HEADER SECTION */}
-      <div className="flex flex-col md:flex-row justify-between items-center mb-3 gap-2">
+      <div className="flex flex-col md:flex-row justify-between items-center mb-3 gap-2 relative z-50">
         <div>
           <h1 className="text-xl font-black text-themed tracking-tight flex items-center gap-2">
             <Users className="text-[#C9A227]" size={18} />
@@ -379,6 +380,7 @@ export default function AttendancePage() {
           >
             <FileSpreadsheet size={16} /> Export Excel
           </button>
+          <NotificationWidget />
         </div>
       </div>
 

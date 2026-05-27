@@ -13,6 +13,7 @@ import {
 } from 'recharts';
 import { useDialog } from "../contexts/DialogContext";
 import { useThemeClasses } from "../hooks/useThemeClasses";
+import NotificationWidget from "../components/NotificationWidget";
 
 const DARK_COLORS  = ['#8b5cf6', '#10b981', '#f59e0b', '#f43f5e', '#3b82f6', '#ec4899'];
 const LIGHT_COLORS = ['#f97316', '#10b981', '#eab308', '#ef4444', '#3b82f6', '#ec4899'];
@@ -140,24 +141,24 @@ const ReportsPage = () => {
 
   const generatorPanel = t.isDark
     ? "themed-card border border-[var(--border-color)]"
-    : "bg-gradient-to-br from-[#D4AF37] to-[#e5d3a1] text-white";
+    : "bg-[var(--accent)] text-white";
 
   return (
     <div className={`p-4 md:p-6 ${t.page}`}>
-      {/* Ambient orbs */}
-      <div className={t.orb1} />
-      <div className={t.orb2} />
 
       {/* HEADER */}
-      <div className="relative z-10 mb-6">
-        <motion.h1 initial={{ opacity:0, x:-20 }} animate={{ opacity:1, x:0 }}
-          className={`text-xl font-black tracking-tight flex items-center gap-2 ${t.heading}`}>
-          <Activity className={t.isDark ? "text-violet-400" : "text-[#D4AF37]"} size={20} />
-          Reports &amp; Insights
-        </motion.h1>
-        <p className={`mt-0.5 text-xs font-medium ${t.muted}`}>
-          Generate comprehensive reports and monitor real-time business metrics.
-        </p>
+      <div className="relative z-50 mb-6 flex justify-between items-start">
+        <div>
+          <motion.h1 initial={{ opacity:0, x:-20 }} animate={{ opacity:1, x:0 }}
+            className={`text-xl font-black tracking-tight flex items-center gap-2 ${t.heading}`}>
+            <Activity className={t.isDark ? "text-violet-400" : "text-[#D4AF37]"} size={20} />
+            Reports &amp; Insights
+          </motion.h1>
+          <p className={`mt-0.5 text-xs font-medium ${t.muted}`}>
+            Generate comprehensive reports and monitor real-time business metrics.
+          </p>
+        </div>
+        <NotificationWidget />
       </div>
 
       {!dashboardData.loading && (

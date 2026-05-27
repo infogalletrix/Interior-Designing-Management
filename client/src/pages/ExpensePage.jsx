@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { useLocation } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import {
   Receipt,
   Search,
@@ -22,6 +22,7 @@ import {
   Pencil,
 } from "lucide-react";
 import { useDialog } from "../contexts/DialogContext";
+import NotificationWidget from "../components/NotificationWidget";
 import SearchableSelect from "../components/SearchableSelect";
 
 const OVERHEAD_CATEGORIES = [
@@ -43,50 +44,86 @@ const INITIAL_EXPENSES = [];
 export default function ExpensePage() {
   const { showDialog } = useDialog();
   const location = useLocation();
+  const navigate = useNavigate();
   const [uiMode, setUiMode] = useState("Dashboard");
   const [sites, setSites] = useState([]);
   
   // Bulk States
-  const [bulkItems, setBulkItems] = useState([]);
+  const [bulkItems, setBulkItems] = useState([{ id: Date.now(), material: "", qty: "", cost: "" }]);
   const [bulkTransactionType, setBulkTransactionType] = useState("Expense");
   const [bulkExpenseType, setBulkExpenseType] = useState("Client");
   const [bulkDate, setBulkDate] = useState(new Date().toISOString().split("T")[0]);
   const [bulkClient, setBulkClient] = useState("");
   const [bulkCategory, setBulkCategory] = useState(OVERHEAD_CATEGORIES[0]);
-  
-  const [bulkNewItem, setBulkNewItem] = useState({
-    material: "",
-    qty: "",
-    cost: ""
-  });
 
-  const addBulkItem = (e) => {
-    if (e && e.preventDefault) e.preventDefault();
-    if (!bulkNewItem.cost || !bulkNewItem.material) {
-      showDialog({ title: "Missing Information", message: "Please fill out description and cost.", type: "alert" });
-      return;
-    }
-    const isCredit = bulkTransactionType === "Credit";
-    const actualType = isCredit ? "Credit" : bulkExpenseType;
-    if (actualType === "Client" && !bulkClient) {
-      showDialog({ title: "Missing Work Order", message: "Please select a Work Order before adding.", type: "alert" });
-      return;
-    }
-    setBulkItems([...bulkItems, {
-      ...bulkNewItem,
-      id: Date.now(),
-      expenseType: actualType,
-      date: bulkDate,
-      client: actualType === "Client" ? bulkClient : "",
-      category: actualType === "Overhead" ? bulkCategory : actualType === "Credit" ? bulkCategory : "",
-      description: actualType === "Overhead" || actualType === "Credit" ? bulkNewItem.material : "",
-      material: actualType === "Client" ? bulkNewItem.material : "",
-      cost: parseFloat(bulkNewItem.cost || 0)
-    }]);
-    setBulkNewItem({ material: "", qty: "", cost: "" });
+  const addBulkRow = () => {
+    setBulkItems((prev) => [
+      ...prev,
+      { id: Date.now() + Math.random(), material: "", qty: "", cost: "" },
+    ]);
   };
 
-  const removeBulkItem = (id) => setBulkItems(bulkItems.filter((i) => i.id !== id));
+  const handleBulkItemChange = (id, field, value) => {
+    setBulkItems((prev) =>
+      prev.map((item) => (item.id === id ? { ...item, [field]: value } : item))
+    );
+  };
+
+  const handleKeyDown = (e, idx, field) => {
+    const fields = ["material", "qty", "cost"];
+    if (e.key === "Enter") {
+      e.preventDefault();
+      if (idx === bulkItems.length - 1) {
+        addBulkRow();
+        setTimeout(() => {
+          const nextInput = document.getElementById(`bulk-input-${idx + 1}-material`);
+          if (nextInput) nextInput.focus();
+        }, 50);
+      } else {
+        const nextInput = document.getElementById(`bulk-input-${idx + 1}-${field}`);
+        if (nextInput) nextInput.focus();
+      }
+    } else if (e.key === "ArrowDown") {
+      e.preventDefault();
+      const nextInput = document.getElementById(`bulk-input-${idx + 1}-${field}`);
+      if (nextInput) nextInput.focus();
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      const prevInput = document.getElementById(`bulk-input-${idx - 1}-${field}`);
+      if (prevInput) prevInput.focus();
+    } else if (e.key === "ArrowRight") {
+      if (e.target.selectionStart === e.target.value.length) {
+        e.preventDefault();
+        const fieldIdx = fields.indexOf(field);
+        if (fieldIdx < fields.length - 1) {
+          const nextInput = document.getElementById(`bulk-input-${idx}-${fields[fieldIdx + 1]}`);
+          if (nextInput) nextInput.focus();
+        }
+      }
+    } else if (e.key === "ArrowLeft") {
+      if (e.target.selectionEnd === 0) {
+        e.preventDefault();
+        const fieldIdx = fields.indexOf(field);
+        if (fieldIdx > 0) {
+          const prevInput = document.getElementById(`bulk-input-${idx}-${fields[fieldIdx - 1]}`);
+          if (prevInput) prevInput.focus();
+        }
+      }
+    }
+  };
+
+  const removeBulkItem = (id) => {
+    const idx = bulkItems.findIndex((i) => i.id === id);
+    if (idx === 0) {
+      setBulkItems((prev) =>
+        prev.map((item) =>
+          item.id === id ? { ...item, material: "", qty: "", cost: "" } : item
+        )
+      );
+    } else {
+      setBulkItems(bulkItems.filter((i) => i.id !== id));
+    }
+  };
 
   const [activeTab, setActiveTab] = useState("All");
   const [viewType, setViewType] = useState("Monthly");
@@ -123,36 +160,43 @@ export default function ExpensePage() {
   }, []);
 
   const saveBulkExpenses = async () => {
-    if (bulkItems.length === 0) {
-      showDialog({ title: "No Items", message: "No items to save.", type: "alert" });
+    const validItems = bulkItems.filter(i => i.material || i.cost);
+    if (validItems.length === 0) {
+      showDialog({ title: "No Items", message: "No valid items to save.", type: "alert" });
       return;
     }
     
-    // Some basic validation
-    const invalidClient = bulkItems.find(i => i.expenseType === "Client" && !i.client);
-    if (invalidClient) {
-      showDialog({ title: "Missing Information", message: "Please make sure all client expenses have a Client Name specified before adding to the list.", type: "alert" });
+    const isCredit = bulkTransactionType === "Credit";
+    const actualType = isCredit ? "Credit" : bulkExpenseType;
+    if (actualType === "Client" && !bulkClient) {
+      showDialog({ title: "Missing Work Order", message: "Please select a Work Order before saving.", type: "alert" });
       return;
     }
 
     try {
-      for (const item of bulkItems) {
+      for (const item of validItems) {
+        const cost = parseFloat(item.cost || 0);
+        if (cost === 0 && !item.material) continue;
+        
         await fetch('/api/finance/expenses', {
           method: 'POST',
           headers: {'Content-Type': 'application/json'},
           body: JSON.stringify({ 
-            date: item.date, 
-            category: item.category || "", 
-            description: item.expenseType === "Client" ? item.material : item.description, 
-            amount: item.cost, 
-            clientId: item.client ? item.client.toString() : "", 
-            type: item.expenseType 
+            date: bulkDate, 
+            category: actualType === "Overhead" ? bulkCategory : actualType === "Credit" ? bulkCategory : "", 
+            description: actualType === "Overhead" || actualType === "Credit" ? item.material : "", 
+            amount: cost, 
+            clientId: actualType === "Client" ? bulkClient.toString() : "", 
+            type: actualType 
           })
         });
       }
       await loadExpenses();
-      setBulkItems([]);
+      setBulkItems([{ id: Date.now(), material: "", qty: "", cost: "" }]);
       showDialog({ title: "Success", message: "Bulk expenses saved successfully!", type: "success" });
+      if (location.state?.returnToSites) {
+        navigate("/sites");
+      }
     } catch(err) { console.error(err); }
   };
 
@@ -171,6 +215,10 @@ export default function ExpensePage() {
     if (location.state?.autoFill) {
       const { id, name } = location.state.autoFill;
       setNewExpense(prev => ({ ...prev, client: id ? id.toString() : name, expenseType: "Client" }));
+      if (location.state?.restrictToSiteId) {
+        setBulkClient(location.state.restrictToSiteId);
+        setBulkExpenseType("Client");
+      }
       setIsModalOpen(true);
     }
   }, [location.state]);
@@ -197,17 +245,20 @@ export default function ExpensePage() {
           headers: {'Content-Type': 'application/json'},
           body: JSON.stringify(payload)
         });
-        showDialog({ title: "Updated", message: "Expense updated successfully", type: "success" });
       } else {
         await fetch('/api/finance/expenses', {
           method: 'POST',
           headers: {'Content-Type': 'application/json'},
           body: JSON.stringify(payload)
         });
-        showDialog({ title: "Recorded", message: "Expense recorded successfully", type: "success" });
       }
 
       loadExpenses();
+      showDialog({ title: editingExpenseId ? "Updated" : "Recorded", message: `Expense ${editingExpenseId ? "updated" : "recorded"} successfully`, type: "success" });
+      if (location.state?.returnToSites) {
+        navigate("/sites");
+        return;
+      }
       setIsModalOpen(false);
       setEditingExpenseId(null);
       setNewExpense({
@@ -350,8 +401,8 @@ export default function ExpensePage() {
                     setBulkCategory(OVERHEAD_CATEGORIES[0]);
                   }
                 }}
-                disabled={isClientOnlyView}
-                className={`w-full themed-input border border-[var(--border-color)] px-2 py-1 text-sm outline-none focus:border-indigo-400 font-bold ${isClientOnlyView ? 'opacity-50 cursor-not-allowed' : ''}`}
+                disabled={isClientOnlyView || !!location.state?.restrictToSiteId}
+                className={`w-full themed-input border border-[var(--border-color)] px-2 py-1 text-sm outline-none focus:border-indigo-400 font-bold ${isClientOnlyView || !!location.state?.restrictToSiteId ? 'opacity-50 cursor-not-allowed' : ''}`}
               >
                 <option value="Client">Client</option>
                 {!isClientOnlyView && <option value="Overhead">Overhead</option>}
@@ -390,6 +441,7 @@ export default function ExpensePage() {
                 options={sites.map(site => ({ value: site.id, label: `${site.name} (Client: ${site.clientName})` }))}
                 placeholder="-- Select Work Order --"
                 className="w-full themed-input border border-[var(--border-color)] px-2 py-1 text-sm outline-none focus:border-indigo-400 font-bold"
+                disabled={!!location.state?.restrictToSiteId}
               />
             </div>
           )}
@@ -407,51 +459,18 @@ export default function ExpensePage() {
             </div>
           )}
 
-          <div className={`${bulkTransactionType === "Expense" ? "col-span-3" : "col-span-6"} flex flex-col items-end justify-end pb-0.5`}>
+          <div className={`${bulkTransactionType === "Expense" ? "col-span-2" : "col-span-5"} flex flex-col items-end justify-end pb-0.5 pr-2`}>
             <span className="text-[9px] font-bold text-indigo-400 uppercase tracking-widest">Bulk Total</span>
             <span className="text-sm font-black text-indigo-300">
-              ₹{bulkItems.reduce((s, i) => s + i.cost, 0).toLocaleString()}
+              ₹{bulkItems.reduce((s, i) => s + parseFloat(i.cost || 0), 0).toLocaleString()}
             </span>
+          </div>
+          <div className="col-span-1 flex justify-end items-center pb-1">
+            <NotificationWidget />
           </div>
         </div>
 
-        {/* ── ENTRY ROW ── */}
-        <div className="bg-[var(--bg-surface)] p-1 grid grid-cols-12 gap-1 border-b border-[var(--border-color)]">
-          <div className="col-span-6">
-            <label className="block text-[10px] font-bold text-indigo-400 text-center uppercase">
-              {bulkExpenseType === "Client" ? "Material / Item" : "Description"}
-            </label>
-            <input
-              placeholder={bulkExpenseType === "Client" ? "e.g. Plywood" : "e.g. Office Rent"}
-              value={bulkNewItem.material}
-              onChange={(e) => setBulkNewItem({ ...bulkNewItem, material: e.target.value })}
-              onKeyPress={(e) => e.key === "Enter" && addBulkItem()}
-              className="w-full themed-input border border-[var(--border-color)] px-2 py-1 text-sm outline-none focus:border-indigo-400 font-medium"
-            />
-          </div>
-          <div className="col-span-3">
-            <label className="block text-[10px] font-bold text-indigo-400 text-center uppercase">Qty / Unit (Optional)</label>
-            <input
-              placeholder="e.g. 10 Sheets"
-              value={bulkNewItem.qty}
-              onChange={(e) => setBulkNewItem({ ...bulkNewItem, qty: e.target.value })}
-              onKeyPress={(e) => e.key === "Enter" && addBulkItem()}
-              className="w-full themed-input border border-[var(--border-color)] px-2 py-1 text-sm text-center outline-none focus:border-indigo-400"
-            />
-          </div>
-          <div className="col-span-3">
-            <label className="block text-[10px] font-bold text-indigo-400 text-center uppercase tracking-tighter">Total Cost (₹)</label>
-            <input
-              type="text"
-              inputMode="decimal" pattern="^\d*\.?\d*$"
-              placeholder="0.00"
-              value={bulkNewItem.cost}
-              onChange={(e) => setBulkNewItem({ ...bulkNewItem, cost: e.target.value.replace(/[^0-9.]/g, '').replace(/(\..*?)\..*/g, '$1') })}
-              onKeyPress={(e) => e.key === "Enter" && addBulkItem()}
-              className="w-full themed-input border border-[var(--border-color)] px-2 py-1 text-sm text-right outline-none focus:border-indigo-400 font-bold"
-            />
-          </div>
-        </div>
+
 
         {/* ── TABLE ── */}
         <div className="flex-grow bg-[var(--bg-surface)] overflow-y-auto">
@@ -460,40 +479,79 @@ export default function ExpensePage() {
               <tr className="uppercase text-muted font-bold">
                 <th className="px-2 py-1 border-r border-gray-300 text-center w-12">Rem</th>
                 <th className="px-2 py-1 border-r border-gray-300 text-center w-10">S#</th>
-                <th className="px-2 py-1 border-r border-gray-300 text-center w-24">Type</th>
-                <th className="px-2 py-1 border-r border-gray-300 text-left">Client/Category</th>
-                <th className="px-2 py-1 border-r border-gray-300 text-left">Details</th>
-                <th className="px-2 py-1 border-r border-gray-300 text-center w-20">Qty</th>
-                <th className="px-2 py-1 text-right w-28">Cost (₹)</th>
+                <th className="px-2 py-1 border-r border-gray-300 text-left">Details / Material</th>
+                <th className="px-2 py-1 border-r border-gray-300 text-center w-24">Qty / Unit</th>
+                <th className="px-2 py-1 text-right w-32">Cost (₹)</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200">
               {bulkItems.map((item, idx) => (
                 <tr key={item.id} className="themed-row">
                   <td className="px-2 py-1 border-r border-white/10 text-center">
-                    <button onClick={() => removeBulkItem(item.id)} className="text-red-400 hover:text-red-600">
-                      <Trash2 size={12} />
+                    <button
+                      onClick={() => removeBulkItem(item.id)}
+                      className="text-red-400 hover:text-red-600 p-1"
+                      title={idx === 0 ? "Clear Row" : "Remove Row"}
+                    >
+                      <Trash2 size={14} />
                     </button>
                   </td>
-                  <td className="px-2 py-1 border-r border-[var(--border-color)] text-center font-bold text-muted">{idx + 1}</td>
-                  <td className="px-2 py-1 border-r border-[var(--border-color)] text-center font-semibold text-indigo-400">{item.expenseType}</td>
-                  <td className="px-2 py-1 border-r border-white/10 uppercase font-medium">
-                    {item.expenseType === "Client" ? (sites.find(s => s.id.toString() === item.client?.toString())?.name || item.client) : item.category}
+                  <td className="px-2 py-1 border-r border-white/10 text-center font-bold text-gray-400">
+                    {idx + 1}
                   </td>
-                  <td className="px-2 py-1 border-r border-white/10">{item.material || item.description}</td>
-                  <td className="px-2 py-1 border-r border-white/10 text-center text-slate-400">{item.qty || "—"}</td>
-                  <td className="px-2 py-1 text-right font-black text-indigo-700">{item.cost.toFixed(2)}</td>
+                  <td className="px-1 py-1 border-r border-white/10">
+                    <input
+                      id={`bulk-input-${idx}-material`}
+                      type="text"
+                      placeholder={bulkExpenseType === "Client" ? "e.g. Plywood" : "e.g. Office Rent"}
+                      value={item.material || ""}
+                      onChange={(e) => handleBulkItemChange(item.id, "material", e.target.value)}
+                      onKeyDown={(e) => handleKeyDown(e, idx, "material")}
+                      className="w-full bg-transparent border-none outline-none text-themed font-medium px-1 placeholder-slate-600"
+                    />
+                  </td>
+                  <td className="px-1 py-1 border-r border-white/10">
+                    <input
+                      id={`bulk-input-${idx}-qty`}
+                      type="text"
+                      placeholder="e.g. 10 Sheets"
+                      value={item.qty || ""}
+                      onChange={(e) => handleBulkItemChange(item.id, "qty", e.target.value)}
+                      onKeyDown={(e) => handleKeyDown(e, idx, "qty")}
+                      className="w-full bg-transparent border-none outline-none text-center text-themed px-1"
+                    />
+                  </td>
+                  <td className="px-1 py-1 border-r border-white/10">
+                    <input
+                      id={`bulk-input-${idx}-cost`}
+                      type="text"
+                      inputMode="decimal"
+                      placeholder="0.00"
+                      value={item.cost || ""}
+                      onChange={(e) => handleBulkItemChange(item.id, "cost", e.target.value.replace(/[^0-9.]/g, '').replace(/(\..*?)\..*/g, '$1'))}
+                      onKeyDown={(e) => handleKeyDown(e, idx, "cost")}
+                      className="w-full bg-transparent border-none outline-none text-right text-themed px-1 font-bold"
+                    />
+                  </td>
                 </tr>
               ))}
               {bulkItems.length === 0 && (
                 <tr>
-                  <td colSpan="7" className="py-20 text-center text-muted font-bold uppercase tracking-widest italic">
+                  <td colSpan="5" className="py-20 text-center text-muted font-bold uppercase tracking-widest italic">
                     No items in bulk entry list
                   </td>
                 </tr>
               )}
             </tbody>
           </table>
+          <div className="p-2 border-b border-[var(--border-color)] flex justify-center">
+            <button 
+              onClick={addBulkRow}
+              className="flex items-center gap-2 px-4 py-1.5 bg-indigo-500/10 text-indigo-400 rounded-lg font-bold text-xs hover:bg-indigo-500/20 transition-all border border-indigo-500/20"
+            >
+              <Plus size={14} strokeWidth={3} /> Add Row
+            </button>
+          </div>
         </div>
 
         {/* ── ACTION BAR ── */}
@@ -510,7 +568,7 @@ export default function ExpensePage() {
                 title: "Clear Form",
                 message: "Clear bulk list?",
                 type: "confirm",
-                onConfirm: () => setBulkItems([])
+                onConfirm: () => setBulkItems([{ id: Date.now(), material: "", qty: "", cost: "" }])
               });
             }}
             className="bg-[#D4AF37] hover:bg-[#c4a133] text-white px-4 py-1.5 rounded flex items-center gap-2 text-xs font-bold transition shadow-sm"
@@ -531,7 +589,7 @@ export default function ExpensePage() {
   return (
     <div className="p-4 md:p-6 page-wrapper min-h-screen relative">
       {/* Header */}
-      <div className="flex justify-between items-center mb-5">
+      <div className="flex justify-between items-center mb-5 relative z-50">
         <div>
           <h1 className="text-xl font-black text-themed flex items-center gap-2">
             <Receipt className="text-[var(--accent)]" size={18} />
@@ -583,6 +641,7 @@ export default function ExpensePage() {
           >
             <Plus size={18} /> Log Expense
           </button>
+          <NotificationWidget />
         </div>
       </div>
 
@@ -880,6 +939,7 @@ export default function ExpensePage() {
                         options={sites.map(site => ({ value: site.id, label: `${site.name} (Client: ${site.clientName})` }))}
                         placeholder="-- Select a Work Order --"
                         className="w-full p-4 themed-input border border-[var(--border-color)] rounded-2xl outline-none focus:border-indigo-500 font-bold text-sm transition"
+                        disabled={!!location.state?.restrictToSiteId}
                       />
                     </div>
                     <div>

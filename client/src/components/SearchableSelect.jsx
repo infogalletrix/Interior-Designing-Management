@@ -6,7 +6,8 @@ export default function SearchableSelect({
   value,
   onChange,
   placeholder = "Select an option...",
-  className = "p-3 border border-[var(--border-color)] rounded-xl text-sm font-bold themed-input"
+  className = "p-3 border border-[var(--border-color)] rounded-xl text-sm font-bold themed-input",
+  disabled = false
 }) {
   const [isOpen, setIsOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
@@ -29,10 +30,11 @@ export default function SearchableSelect({
   );
 
   return (
-    <div className="relative w-full" ref={wrapperRef}>
+    <div className={`relative w-full ${disabled ? "opacity-60 cursor-not-allowed" : ""}`} ref={wrapperRef}>
       <div
-        className={`flex items-center justify-between w-full cursor-pointer outline-none transition ${className}`}
+        className={`flex items-center justify-between w-full outline-none transition ${disabled ? "pointer-events-none" : "cursor-pointer"} ${className}`}
         onClick={() => {
+          if (disabled) return;
           setIsOpen(!isOpen);
           setSearchTerm("");
         }}

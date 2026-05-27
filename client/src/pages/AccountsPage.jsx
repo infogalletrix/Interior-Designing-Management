@@ -12,12 +12,14 @@ import {
   TrendingUp,
   TrendingDown,
   Clock,
+  Calendar,
   Filter,
   FileText,
   Wallet,
   Receipt,
   IndianRupee,
 } from "lucide-react";
+import NotificationWidget from "../components/NotificationWidget";
 
 const CATEGORY_ICONS = {
   "Project Income": TrendingUp,
@@ -37,6 +39,8 @@ export default function AccountsPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("All");
   const [typeFilter, setTypeFilter] = useState("All");
+  const [fromDate, setFromDate] = useState("");
+  const [toDate, setToDate] = useState("");
   const [currentTime, setCurrentTime] = useState(new Date());
 
   useEffect(() => {
@@ -64,6 +68,27 @@ export default function AccountsPage() {
     const today = new Date();
     if (viewType === "Monthly") {
       return itemDate.getMonth() === today.getMonth() && itemDate.getFullYear() === today.getFullYear();
+    }
+    if (viewType === "Last Month") {
+      let m = today.getMonth() - 1;
+      let y = today.getFullYear();
+      if (m < 0) {
+        m = 11;
+        y = y - 1;
+      }
+      return itemDate.getMonth() === m && itemDate.getFullYear() === y;
+    }
+    if (viewType === "Custom") {
+      let isMatch = true;
+      if (fromDate) {
+        isMatch = isMatch && itemDate >= new Date(fromDate);
+      }
+      if (toDate) {
+        const toD = new Date(toDate);
+        toD.setHours(23, 59, 59, 999);
+        isMatch = isMatch && itemDate <= toD;
+      }
+      return isMatch;
     }
     const fiscalYearStart = today.getMonth() >= 3 ? today.getFullYear() : today.getFullYear() - 1;
     return itemDate >= new Date(fiscalYearStart, 3, 1);
@@ -145,7 +170,7 @@ export default function AccountsPage() {
   return (
     <div className="p-4 md:p-6 page-wrapper">
       {/* Header */}
-      <div className="flex justify-between items-center mb-5">
+      <div className="flex justify-between items-center mb-5 relative z-50">
         <div>
           <h1 className="text-xl font-black text-themed flex items-center gap-2">
             <Landmark className="text-[var(--accent)]" size={18} />
@@ -155,9 +180,18 @@ export default function AccountsPage() {
             Read-only balance sheet — auto-synced from all modules.
           </p>
         </div>
-        <div className="flex items-center gap-2 px-3 py-1.5 bg-[var(--accent)]/10 border border-[var(--accent)]/20 rounded-xl text-[var(--accent)] font-bold text-xs">
-          <Clock size={13} />
-          {currentTime.toLocaleTimeString()}
+        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-3 px-4 py-1.5 bg-[var(--accent)]/10 border border-[var(--accent)]/20 rounded-xl text-[var(--accent)] font-bold text-xs">
+            <div className="flex items-center gap-1.5 border-r border-[var(--accent)]/30 pr-3">
+              <Calendar size={13} />
+              {currentTime.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+            </div>
+            <div className="flex items-center gap-1.5">
+              <Clock size={13} />
+              {currentTime.toLocaleTimeString()}
+            </div>
+          </div>
+          <NotificationWidget />
         </div>
       </div>
 
@@ -207,21 +241,52 @@ export default function AccountsPage() {
         {/* Controls */}
         <div className="p-5 border-b border-[var(--border-color)] flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 themed-thead">
           <div className="flex items-center gap-3 flex-wrap">
-            {/* Period Toggle */}
-            <div className="flex themed-card p-1 rounded-xl">
-              {["Monthly", "Financial Year"].map((type) => (
-                <button
-                  key={type}
-                  onClick={() => setViewType(type)}
-                  className={`px-4 py-2 rounded-lg text-xs font-black uppercase tracking-wider transition-all ${
-                    viewType === type
-                      ? "bg-[var(--accent)] text-white shadow"
-                      : "text-muted hover:text-themed"
-                  }`}
-                >
-                  {type}
-                </button>
-              ))}
+            {/* Period Toggle & Custom Date */}
+            <div className="flex items-center gap-3">
+              <div className="flex themed-card p-1 rounded-xl w-max">
+                {["Monthly", "Last Month", "Financial Year", "Custom"].map((type) => (
+                  <button
+                    key={type}
+                    onClick={() => {
+                      setViewType(type);
+                      if (type === "Custom") {
+                        setFromDate("");
+                        setToDate("");
+                      }
+                    }}
+                    className={`px-4 py-2 rounded-lg text-xs font-black uppercase tracking-wider transition-all ${
+                      viewType === type
+                        ? "bg-[var(--accent)] text-white shadow"
+                        : "text-muted hover:text-themed"
+                    }`}
+                  >
+                    {type}
+                  </button>
+                ))}
+              </div>
+              
+              {viewType === "Custom" && (
+                <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 bg-transparent border border-[var(--border-color)] px-2 py-1 rounded-xl">
+                    <label className="text-[10px] font-black text-muted uppercase tracking-widest pl-1">From</label>
+                    <input
+                      type="date"
+                      value={fromDate}
+                      onChange={(e) => setFromDate(e.target.value)}
+                      className="bg-transparent text-xs font-bold themed-input outline-none cursor-pointer"
+                    />
+                  </div>
+                  <div className="flex items-center gap-2 bg-transparent border border-[var(--border-color)] px-2 py-1 rounded-xl">
+                    <label className="text-[10px] font-black text-muted uppercase tracking-widest pl-1">To</label>
+                    <input
+                      type="date"
+                      value={toDate}
+                      onChange={(e) => setToDate(e.target.value)}
+                      className="bg-transparent text-xs font-bold themed-input outline-none cursor-pointer"
+                    />
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Type Filter */}

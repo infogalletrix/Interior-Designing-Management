@@ -21,7 +21,6 @@ import ReportsPage from "./pages/ReportsPage";
 import ReceiptPage from "./pages/ReceiptPage";
 import { DialogProvider } from "./contexts/DialogContext";
 import { ThemeProvider } from "./contexts/ThemeContext";
-import NotificationWidget from "./components/NotificationWidget";
 
 function App() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
@@ -36,7 +35,6 @@ function App() {
               toggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)}
             />
             <main className="flex-1 overflow-y-auto relative flex flex-col items-center">
-              <NotificationWidget />
               <div className="w-full max-w-[1600px] 2xl:max-w-[1920px] mx-auto">
                 <Routes>
                   <Route path="/" element={<Dashboard />} />

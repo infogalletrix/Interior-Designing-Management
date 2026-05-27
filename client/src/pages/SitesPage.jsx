@@ -32,6 +32,8 @@ import {
 import { useDialog } from "../contexts/DialogContext";
 import { useReactToPrint } from "react-to-print";
 import FinalSettlementSheet from "../components/FinalSettlementSheet";
+import NotificationWidget from "../components/NotificationWidget";
+import SearchableSelect from "../components/SearchableSelect";
 
 export default function SitesPage() {
   const { showDialog } = useDialog();
@@ -57,6 +59,7 @@ export default function SitesPage() {
   // Modals
   const [isSiteModalOpen, setIsSiteModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [selectedLoadQuoteId, setSelectedLoadQuoteId] = useState("");
   const [isMediaModalOpen, setIsMediaModalOpen] = useState(false);
   const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
 
@@ -145,6 +148,7 @@ export default function SitesPage() {
       setTimeout(() => {
         const form = document.getElementById("create-site-form");
         if (form) {
+          setSelectedLoadQuoteId(q.id);
           if(q.projectTitle) form.elements.name.value = q.projectTitle;
           if(q.clientName) form.elements.clientName.value = q.clientName;
           if(q.organizationName) form.elements.organizationName.value = q.organizationName;
@@ -176,7 +180,8 @@ export default function SitesPage() {
 
   const handleQuotationSelect = (e) => {
     const qId = e.target.value;
-    const q = quotations.find(qt => qt.id.toString() === qId);
+    setSelectedLoadQuoteId(qId);
+    const q = quotations.find(qt => qt.id.toString() === String(qId));
     if (q) {
       const form = document.getElementById("create-site-form");
       if (form) {
@@ -338,9 +343,25 @@ export default function SitesPage() {
 
       if (res.ok) {
         const createdData = await res.json();
+
+        // If converted from a quotation, update its status to 'Approved'
+        if (selectedLoadQuoteId) {
+          try {
+            const qToUpdate = quotations.find(q => q.id === selectedLoadQuoteId);
+            if (qToUpdate) {
+              await fetch(`/api/quotations/${selectedLoadQuoteId}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ ...qToUpdate, status: "Approved" })
+              });
+            }
+          } catch(err) { console.error("Failed to update quotation status", err); }
+        }
+
         await loadSites();
         setIsSiteModalOpen(false);
         if (createdData.id) setSelectedSiteId(createdData.id);
+        setSelectedLoadQuoteId(null);
         showDialog({ title: "Success", message: "Work order created successfully!", type: "success" });
       } else {
         const errorBody = await res.text();
@@ -385,7 +406,9 @@ export default function SitesPage() {
           organizationName: selectedSite.organizationName,
           workOrderId: selectedSite.id,
           desc: ""
-        }
+        },
+        returnToSites: true,
+        restrictToSiteId: selectedSite.id
       }
     });
   };
@@ -399,7 +422,9 @@ export default function SitesPage() {
           desc: selectedSite.name,
           siteId: selectedSite.id,
           totalAmount: selectedSite.budget
-        }
+        },
+        returnToSites: true,
+        restrictToSiteId: selectedSite.id
       }
     });
   };
@@ -411,7 +436,9 @@ export default function SitesPage() {
         autoFill: {
           id: selectedSite.id,
           name: selectedSite.name
-        }
+        },
+        returnToSites: true,
+        restrictToSiteId: selectedSite.id
       }
     });
   };
@@ -419,7 +446,7 @@ export default function SitesPage() {
   return (
     <div className="page-wrapper min-h-screen font-sans">
       <div className="p-4 md:p-6">
-        <div className="flex justify-between items-center mb-5">
+        <div className="flex justify-between items-center mb-5 relative z-50">
           <div>
             <h1 className="text-xl font-black text-themed flex items-center gap-2">
               <Building className="text-[#C9A227]" size={18} />
@@ -429,12 +456,15 @@ export default function SitesPage() {
               Manage site operations, financial links, and project progress.
             </p>
           </div>
-          <button
-            onClick={() => setIsSiteModalOpen(true)}
-            className="bg-[#C9A227] hover:bg-[#B8911F] text-white px-4 py-2 rounded-xl font-bold flex items-center gap-2 shadow-md transition text-sm"
-          >
-            <Plus size={16} /> Create New Work Order
-          </button>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => setIsSiteModalOpen(true)}
+              className="bg-[#C9A227] hover:bg-[#B8911F] text-white px-4 py-2 rounded-xl font-bold flex items-center gap-2 shadow-md transition text-sm"
+            >
+              <Plus size={16} /> Create New Work Order
+            </button>
+            <NotificationWidget />
+          </div>
         </div>
 
         <div className="grid grid-cols-1 xl:grid-cols-12 gap-8">
@@ -955,72 +985,87 @@ export default function SitesPage() {
       {/* Site Create Modal */}
       {isSiteModalOpen && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <form id="create-site-form" onSubmit={handleCreateSite} className="themed-modal rounded-3xl w-full max-w-lg overflow-hidden shadow-2xl">
-            <div className="bg-[#C9A227] p-6 flex justify-between items-center text-white">
-              <h2 className="text-xl font-black">Create Work Order</h2>
-              <button type="button" onClick={() => setIsSiteModalOpen(false)} className="hover:text-slate-300"><X /></button>
+          <form id="create-site-form" onSubmit={handleCreateSite} className="themed-modal rounded-3xl w-full max-w-xl overflow-hidden shadow-2xl animate-in zoom-in duration-200 border border-[var(--border-color)]">
+            <div className="bg-[var(--accent)] p-6 flex justify-between items-center text-white">
+              <h2 className="text-xl font-black tracking-tight">Create Work Order</h2>
+              <button type="button" onClick={() => setIsSiteModalOpen(false)} className="hover:text-white/70 transition-colors bg-white/10 p-1.5 rounded-full"><X size={20} /></button>
             </div>
-            <div className="p-4 space-y-2">
+            <div className="p-5 space-y-4">
               {/* Load From Quote */}
-              <div className="md:col-span-3">
-                <label className="block text-[10px] font-bold text-slate-500 uppercase mb-0.5">Load From Quotation</label>
-                <select onChange={handleQuotationSelect} className="w-full border py-1.5 px-3 rounded-lg outline-none focus:border-indigo-500 font-medium text-sm">
-                  <option value="">Select a quotation to autofill...</option>
-                  {quotations.map(q => (
-                    <option key={q.id} value={q.id}>#{q.id} - {q.projectTitle} ({q.clientName})</option>
-                  ))}
-                </select>
+              <div className="md:col-span-2">
+                <label className="block text-[10px] font-black text-muted uppercase tracking-widest mb-1.5">Load From Quotation</label>
+                <SearchableSelect
+                  options={quotations.map(q => ({ label: `Quotation No: ${q.quoteNo || q.id} - ${q.projectTitle} (${q.clientName})`, value: q.id }))}
+                  value={selectedLoadQuoteId}
+                  onChange={handleQuotationSelect}
+                  placeholder="Select a quotation to autofill..."
+                />
               </div>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 <div className="md:col-span-2">
-                  <label className="block text-[10px] font-bold text-slate-500 uppercase mb-0.5">Project Name</label>
-                  <input required name="name" placeholder="e.g. Modern Villa Interior" className="w-full border py-1.5 px-3 rounded-lg outline-none focus:border-indigo-500 font-medium text-sm" />
+                  <label className="block text-[10px] font-black text-muted uppercase tracking-widest mb-1">Project Name</label>
+                  <input required name="name" placeholder="e.g. Modern Villa Interior" className="themed-input w-full border border-[var(--border-color)] p-2.5 rounded-xl outline-none focus:border-[var(--accent)] font-bold text-sm transition-all shadow-sm" />
                 </div>
                 <div>
-                  <label className="block text-[10px] font-bold text-slate-500 uppercase mb-0.5">Client Name</label>
-                  <input required name="clientName" list="crm-clients-list" onChange={handleClientNameChange} placeholder="e.g. John Doe" className="w-full border py-1.5 px-3 rounded-lg outline-none focus:border-indigo-500 font-medium text-sm" />
+                  <label className="block text-[10px] font-black text-muted uppercase tracking-widest mb-1">Client Name</label>
+                  <input required name="clientName" list="crm-clients-list" onChange={handleClientNameChange} placeholder="e.g. John Doe" className="themed-input w-full border border-[var(--border-color)] p-2.5 rounded-xl outline-none focus:border-[var(--accent)] font-bold text-sm transition-all shadow-sm" />
                 </div>
                 <div>
-                  <label className="block text-[10px] font-bold text-slate-500 uppercase mb-0.5">Org Name (Opt)</label>
-                  <input name="organizationName" placeholder="e.g. Acme Corp" className="w-full border py-1.5 px-3 rounded-lg outline-none focus:border-indigo-500 font-medium text-sm" />
+                  <label className="block text-[10px] font-black text-muted uppercase tracking-widest mb-1">Org Name (Opt)</label>
+                  <input name="organizationName" placeholder="e.g. Acme Corp" className="themed-input w-full border border-[var(--border-color)] p-2.5 rounded-xl outline-none focus:border-[var(--accent)] font-bold text-sm transition-all shadow-sm" />
                 </div>
                 <div>
-                  <label className="block text-[10px] font-bold text-slate-500 uppercase mb-0.5">Initial Status</label>
-                  <select name="status" className="w-full border py-1.5 px-3 rounded-lg outline-none focus:border-indigo-500 font-medium text-sm">
+                  <label className="block text-[10px] font-black text-muted uppercase tracking-widest mb-1">Initial Status</label>
+                  <select name="status" className="themed-input w-full border border-[var(--border-color)] p-2.5 rounded-xl outline-none focus:border-[var(--accent)] font-bold text-sm transition-all shadow-sm">
                     <option>Pre-Construction</option>
                     <option>In Progress</option>
                     <option>Completed</option>
                   </select>
                 </div>
                 <div>
-                  <label className="block text-[10px] font-bold text-slate-500 uppercase mb-0.5 flex items-center gap-1"><Calendar size={10} /> Start Date</label>
-                  <input required type="date" name="startDate" defaultValue={new Date().toISOString().split("T")[0]} className="w-full border py-1.5 px-3 rounded-lg outline-none focus:border-indigo-500 font-medium text-sm" />
+                  <label className="block text-[10px] font-black text-muted uppercase tracking-widest mb-1 flex items-center gap-1"><Calendar size={12} /> Start Date</label>
+                  <input required type="date" name="startDate" defaultValue={new Date().toISOString().split("T")[0]} className="themed-input w-full border border-[var(--border-color)] p-2.5 rounded-xl outline-none focus:border-[var(--accent)] font-bold text-sm transition-all shadow-sm" />
                 </div>
-                <div>
-                  <label className="block text-[10px] font-bold text-slate-500 uppercase mb-0.5 flex items-center gap-1"><IndianRupee size={10} /> Est. Budget (₹)</label>
-                  <input required type="text" inputMode="decimal" pattern="^\d*\.?\d*$" name="budget" placeholder="0" className="w-full border py-1.5 px-3 rounded-lg outline-none focus:border-indigo-500 font-medium text-sm" title="Please enter a valid number" />
-                </div>
-                <div className="flex items-center gap-2 mt-3">
-                  <input type="checkbox" name="isNegotiated" id="isNegotiatedAdd" checked={isNegotiatedAdd} onChange={(e) => setIsNegotiatedAdd(e.target.checked)} className="accent-indigo-500 w-3.5 h-3.5" />
-                  <label htmlFor="isNegotiatedAdd" className="text-[10px] font-bold text-slate-500 uppercase">Negotiated</label>
+                
+                {/* Budget Row */}
+                <div className={`${isNegotiatedAdd ? 'md:col-span-1' : 'md:col-span-1'}`}>
+                  <label className="block text-[10px] font-black text-muted uppercase tracking-widest mb-1 flex items-center gap-1"><IndianRupee size={12} /> Est. Budget (₹)</label>
+                  <input required type="text" inputMode="decimal" pattern="^\d*\.?\d*$" name="budget" placeholder="0" className="themed-input w-full border border-[var(--border-color)] p-2.5 rounded-xl outline-none focus:border-[var(--accent)] font-bold text-sm transition-all shadow-sm" title="Please enter a valid number" />
                 </div>
 
-                {isNegotiatedAdd && (
-                  <div>
-                    <label className="block text-[10px] font-bold text-indigo-500 uppercase mb-0.5">New Est. Budget</label>
-                    <input type="text" inputMode="decimal" pattern="^\d*\.?\d*$" name="negotiatedBudget" placeholder="New Budget" className="w-full border-2 border-[#C9A227]/30 py-1.5 px-3 rounded-lg outline-none focus:border-[#C9A227] font-bold bg-[#C9A227]/5 text-sm" title="Please enter a valid number" />
+                {isNegotiatedAdd ? (
+                  <div className="animate-in fade-in slide-in-from-top-2 duration-300">
+                    <label className="block text-[10px] font-black text-[var(--accent)] uppercase tracking-widest mb-1">New Est. Budget</label>
+                    <input type="text" inputMode="decimal" pattern="^\d*\.?\d*$" name="negotiatedBudget" placeholder="New Budget" className="themed-input w-full border-2 border-[var(--accent)]/30 p-2.5 rounded-xl outline-none focus:border-[var(--accent)] font-black text-[var(--accent)] bg-[var(--accent)]/5 text-sm transition-all shadow-sm" title="Please enter a valid number" />
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2 mt-6">
+                    <input type="checkbox" name="isNegotiated" id="isNegotiatedAdd" checked={isNegotiatedAdd} onChange={(e) => setIsNegotiatedAdd(e.target.checked)} className="accent-[var(--accent)] w-4 h-4 cursor-pointer" />
+                    <label htmlFor="isNegotiatedAdd" className="text-[10px] font-black text-muted uppercase tracking-widest cursor-pointer">Negotiated</label>
                   </div>
                 )}
-                <div className={`${isNegotiatedAdd ? 'md:col-span-3' : 'md:col-span-1'}`}>
-                  <label className="block text-[10px] font-bold text-slate-500 uppercase mb-0.5">Description</label>
-                  <input name="description" placeholder="Short scope..." className="w-full border py-1.5 px-3 rounded-lg outline-none focus:border-indigo-500 font-medium text-sm" />
+
+                {/* If negotiated is checked, show the checkbox below the new budget so user can uncheck it */}
+                {isNegotiatedAdd && (
+                  <div className="md:col-span-2 flex items-center gap-2 -mt-1 mb-1">
+                    <input type="checkbox" name="isNegotiated" id="isNegotiatedAdd2" checked={isNegotiatedAdd} onChange={(e) => setIsNegotiatedAdd(e.target.checked)} className="accent-[var(--accent)] w-4 h-4 cursor-pointer" />
+                    <label htmlFor="isNegotiatedAdd2" className="text-[10px] font-black text-[var(--accent)] uppercase tracking-widest cursor-pointer">Negotiated Applied</label>
+                  </div>
+                )}
+
+                <div className="md:col-span-2">
+                  <label className="block text-[10px] font-black text-muted uppercase tracking-widest mb-1">Description</label>
+                  <input name="description" placeholder="Short scope..." className="themed-input w-full border border-[var(--border-color)] p-2.5 rounded-xl outline-none focus:border-[var(--accent)] font-bold text-sm transition-all shadow-sm" />
                 </div>
-                <div className="md:col-span-3">
-                  <label className="block text-[10px] font-bold text-slate-500 uppercase mb-0.5">Site Address</label>
-                  <input required name="address" placeholder="e.g. Kochi, Kerala" className="w-full border py-1.5 px-3 rounded-lg outline-none focus:border-indigo-500 font-medium text-sm" />
+                <div className="md:col-span-2">
+                  <label className="block text-[10px] font-black text-muted uppercase tracking-widest mb-1">Site Address</label>
+                  <input required name="address" placeholder="e.g. Kochi, Kerala" className="themed-input w-full border border-[var(--border-color)] p-2.5 rounded-xl outline-none focus:border-[var(--accent)] font-bold text-sm transition-all shadow-sm" />
                 </div>
               </div>
-              <button type="submit" className="w-full bg-[#C9A227] text-white py-2.5 rounded-lg font-black uppercase tracking-widest mt-2 shadow-sm text-sm">Save Work Order</button>
+              <div className="flex gap-3 justify-end mt-6 pt-5 border-t border-[var(--border-color)]">
+                <button type="button" onClick={() => setIsSiteModalOpen(false)} className="px-5 py-2.5 rounded-xl text-sm font-bold text-slate-400 hover:bg-white/5 transition-colors">Cancel</button>
+                <button type="submit" className="px-6 py-2.5 bg-[var(--accent)] hover:bg-[var(--accent-hover)] text-white rounded-xl font-black uppercase tracking-widest shadow-md transition-all text-xs">Save Work Order</button>
+              </div>
             </div>
           </form>
         </div>

@@ -18,12 +18,8 @@ export function useThemeClasses() {
       : "bg-[#F4F5F7] text-[#1C2B4B] min-h-screen font-sans relative overflow-hidden",
 
     // ── Ambient background orbs ─────────────────────────────────────
-    orb1: d
-      ? "absolute top-0 left-1/4 w-96 h-96 bg-violet-600/15 rounded-full blur-[120px] pointer-events-none"
-      : "hidden",
-    orb2: d
-      ? "absolute bottom-0 right-1/4 w-96 h-96 bg-indigo-600/10 rounded-full blur-[120px] pointer-events-none"
-      : "hidden",
+    orb1: "hidden",
+    orb2: "hidden",
 
     // ── Cards / panels ───────────────────────────────────────────────
     card: d

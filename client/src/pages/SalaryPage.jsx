@@ -10,6 +10,7 @@ import {
   MessageCircle, Eye, Send, Pencil, Trash2
 } from "lucide-react";
 import { useDialog } from "../contexts/DialogContext";
+import NotificationWidget from "../components/NotificationWidget";
 
 const MONTHS = [
   "January", "February", "March", "April", "May", "June",
@@ -25,7 +26,7 @@ export default function SalaryPage() {
   
   const [selectedEmployee, setSelectedEmployee] = useState(null);
   const [selectedMonth, setSelectedMonth] = useState(MONTHS[today.getMonth()]);
-  const [selectedYear] = useState(today.getFullYear());
+  const [selectedYear, setSelectedYear] = useState(today.getFullYear());
   const [searchTerm, setSearchTerm] = useState("");
   const [printData, setPrintData] = useState(null);
   const [viewPayslip, setViewPayslip] = useState(null); // payroll entry to preview
@@ -382,15 +383,21 @@ export default function SalaryPage() {
   };
 
   const handleDeleteHistory = async (h) => {
-    if (!window.confirm("Are you sure you want to delete and reverse this entry? This will reflect in Accounts.")) return;
-    try {
-      await fetch(`/api/finance/payroll/${h.id}`, { method: 'DELETE' });
-      showDialog({ title: "Reversed", message: "Entry has been reversed successfully.", type: "success" });
-      fetchPayroll();
-      fetchEmployees();
-    } catch (e) {
-      console.error(e);
-    }
+    showDialog({
+      title: "Reverse Payroll Entry",
+      message: "Are you sure you want to delete and reverse this entry? This will reflect in Accounts.",
+      type: "confirm",
+      onConfirm: async () => {
+        try {
+          await fetch(`/api/finance/payroll/${h.id}`, { method: 'DELETE' });
+          showDialog({ title: "Reversed", message: "Entry has been reversed successfully.", type: "success" });
+          fetchPayroll();
+          fetchEmployees();
+        } catch (e) {
+          console.error(e);
+        }
+      }
+    });
   };
 
   const salaryHistory = payrollHistory.filter(
@@ -542,7 +549,7 @@ export default function SalaryPage() {
       <motion.div 
         initial={{ opacity: 0, y: -10 }}
         animate={{ opacity: 1, y: 0 }}
-        className="relative z-10 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-4"
+        className="relative z-50 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-4"
       >
         <div>
           <h1 className="text-xl font-black text-themed flex items-center gap-2 tracking-tight">
@@ -573,8 +580,17 @@ export default function SalaryPage() {
                 <option key={m}>{m}</option>
               ))}
             </select>
-            <span className="text-violet-400 font-bold text-xs ml-1">{selectedYear}</span>
+            <select
+              className="text-xs font-black text-themed outline-none bg-transparent cursor-pointer [&>option]:bg-[var(--modal-bg)]"
+              value={selectedYear}
+              onChange={(e) => setSelectedYear(e.target.value)}
+            >
+              {[2024, 2025].map((y) => (
+                <option key={y}>{y}</option>
+              ))}
+            </select>
           </div>
+          <NotificationWidget />
         </div>
       </motion.div>
 

@@ -247,7 +247,7 @@ namespace Mona_Interior.Controllers
         [HttpGet("payroll")]
         public async Task<IActionResult> GetPayroll()
         {
-            var records = await _db.PayrollRecords.OrderByDescending(p => p.Year).ThenBy(p => p.Month).ToListAsync();
+            var records = await _db.PayrollRecords.Where(p => p.Status != "Reversed").OrderByDescending(p => p.Year).ThenBy(p => p.Month).ToListAsync();
             var result = records.Select(p => new
             {
                 id = p.Id.ToString(),

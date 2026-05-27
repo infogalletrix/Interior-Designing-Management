@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from "react";
 import { useReactToPrint } from "react-to-print";
 import { useNavigate, useLocation } from "react-router-dom";
 import PrintableInvoice from "../components/PrintableInvoice";
+import NotificationWidget from "../components/NotificationWidget";
 import {
   Trash2,
   Printer,
@@ -284,7 +285,9 @@ export default function BillingPage() {
       const isNonGST = q.billType === "Non-GST";
       if (isNonGST) setBillType("Non-GST");
       const mapped = q.items.map((i) => {
-        const taxable = parseFloat(i.area || 1) * parseFloat(i.rate);
+        const areaVal = parseFloat(i.area) || 0;
+        const rateVal = parseFloat(i.rate) || 0;
+        const taxable = areaVal * rateVal;
         const gst = isNonGST ? 0 : (taxable * 18) / 100;
         return {
           work: i.description,
@@ -382,7 +385,9 @@ export default function BillingPage() {
     setBillType(type);
     
     const mappedItems = quote.items.map((i) => {
-      const taxable = parseFloat(i.area || 1) * parseFloat(i.rate);
+      const areaVal = parseFloat(i.area) || 0;
+      const rateVal = parseFloat(i.rate) || 0;
+      const taxable = areaVal * rateVal;
       const gst = isNonGST ? 0 : (taxable * 18) / 100;
       return {
         work: i.description,
@@ -457,8 +462,13 @@ export default function BillingPage() {
       e.preventDefault();
       if (idx === items.length - 1) {
         addNewRow();
+        setTimeout(() => {
+          const nextInput = document.getElementById(`input-${idx + 1}-work`);
+          if (nextInput) nextInput.focus();
+        }, 50);
       } else {
-        // focus next row if possible, but for now just prevent default
+        const nextInput = document.getElementById(`input-${idx + 1}-${field}`);
+        if (nextInput) nextInput.focus();
       }
     } else if (e.key === "ArrowDown") {
       e.preventDefault();
@@ -507,7 +517,12 @@ export default function BillingPage() {
   };
 
   const removeItem = (id) => {
-    setItems(items.filter((item) => item.id !== id));
+    const idx = items.findIndex(i => i.id === id);
+    if (idx === 0) {
+      setItems(prev => prev.map(item => item.id === id ? { ...item, work: "", area: "", price: "", taxableAmount: 0, gstAmount: 0, amount: 0 } : item));
+    } else {
+      setItems(items.filter((item) => item.id !== id));
+    }
   };
 
   const subTotal = items.reduce((sum, item) => sum + item.taxableAmount, 0);
@@ -624,6 +639,10 @@ export default function BillingPage() {
         type: "success"
       });
       setTimeout(() => {
+        if (location.state?.returnToSites) {
+          navigate("/sites");
+          return;
+        }
         if (!isEditMode) {
           // Properly refresh the billing page for the next invoice
           setItems([{ id: Date.now(), work: "", unit: "Sq.Ft", area: "", price: "", gstPerc: 18, taxableAmount: 0, gstAmount: 0, amount: 0 }]);
@@ -748,38 +767,43 @@ export default function BillingPage() {
   return (
     <div className="bg-slate-950 text-slate-200 min-h-screen font-sans flex flex-col">
       {/* Sessions Tab Bar */}
-      <div className="bg-slate-800 px-2 pt-2 flex items-center gap-1 overflow-x-auto no-scrollbar border-b border-slate-700">
-        {sessions.map((s) => (
-          <div
-            key={s.id}
-            onClick={() => setActiveSessionId(s.id)}
-            className={`flex items-center gap-2 px-3 py-1.5 rounded-t-lg text-[10px] font-bold uppercase tracking-wider cursor-pointer transition-all ${activeSessionId === s.id
-                ? "bg-gray-200 text-slate-800 shadow-[0_-2px_10px_rgba(0,0,0,0.2)]"
-                : "bg-slate-700 text-slate-400 hover:bg-slate-600 hover:text-white"
-              }`}
-          >
-            <FileText
-              size={12}
-              className={
-                activeSessionId === s.id ? "text-blue-600" : "text-slate-500"
-              }
-            />
-            <span className="max-w-[100px] truncate">{s.title}</span>
-            <button
-              onClick={(e) => closeSession(s.id, e)}
-              className={`p-0.5 rounded-full hover:bg-black/10 transition ${activeSessionId === s.id ? "text-slate-400 hover:text-red-500" : "text-slate-500 hover:text-white"}`}
+      <div className="bg-slate-800 px-2 pt-2 flex items-center justify-between border-b border-slate-700 relative z-50">
+        <div className="flex items-center gap-1 overflow-x-auto no-scrollbar flex-1">
+          {sessions.map((s) => (
+            <div
+              key={s.id}
+              onClick={() => setActiveSessionId(s.id)}
+              className={`flex items-center gap-2 px-3 py-1.5 rounded-t-lg text-[10px] font-bold uppercase tracking-wider cursor-pointer transition-all ${activeSessionId === s.id
+                  ? "bg-gray-200 text-slate-800 shadow-[0_-2px_10px_rgba(0,0,0,0.2)]"
+                  : "bg-slate-700 text-slate-400 hover:bg-slate-600 hover:text-white"
+                }`}
             >
-              <X size={10} />
-            </button>
-          </div>
-        ))}
-        <button
-          onClick={createNewSession}
-          className="p-1.5 text-blue-400 hover:text-blue-300 transition hover:bg-white/5 rounded-full mb-1"
-          title="New Invoice Session"
-        >
-          <Plus size={16} strokeWidth={3} />
-        </button>
+              <FileText
+                size={12}
+                className={
+                  activeSessionId === s.id ? "text-blue-600" : "text-slate-500"
+                }
+              />
+              <span className="max-w-[100px] truncate">{s.title}</span>
+              <button
+                onClick={(e) => closeSession(s.id, e)}
+                className={`p-0.5 rounded-full hover:bg-black/10 transition ${activeSessionId === s.id ? "text-slate-400 hover:text-red-500" : "text-slate-500 hover:text-white"}`}
+              >
+                <X size={10} />
+              </button>
+            </div>
+          ))}
+          <button
+            onClick={createNewSession}
+            className="p-1.5 text-blue-400 hover:text-blue-300 transition hover:bg-white/5 rounded-full mb-1"
+            title="New Invoice Session"
+          >
+            <Plus size={16} strokeWidth={3} />
+          </button>
+        </div>
+        <div className="pb-1 pl-2 shrink-0">
+          <NotificationWidget compact={true} />
+        </div>
       </div>
 
       {/* Edit / Conversion Mode Banner */}
@@ -877,18 +901,22 @@ export default function BillingPage() {
               value={clientName}
               className="w-full themed-input border border-[var(--border-color)] px-2 py-1 text-sm outline-none focus:border-blue-400 cursor-not-allowed opacity-60"
             />
-            <button
-              onClick={() => setShowWorkOrderSearch(true)}
-              className="btn-accent px-2 text-[10px] font-bold whitespace-nowrap"
-            >
-              SELECT WO
-            </button>
-            <button
-              onClick={() => setShowQuoteSearch(true)}
-              className="bg-amber-600 text-white px-2 text-[10px] font-bold hover:bg-amber-700 whitespace-nowrap"
-            >
-              FROM QUOTE
-            </button>
+            {!location.state?.restrictToSiteId && (
+              <>
+                <button
+                  onClick={() => setShowWorkOrderSearch(true)}
+                  className="btn-accent px-2 text-[10px] font-bold whitespace-nowrap"
+                >
+                  SELECT WO
+                </button>
+                <button
+                  onClick={() => setShowQuoteSearch(true)}
+                  className="bg-amber-600 text-white px-2 text-[10px] font-bold hover:bg-amber-700 whitespace-nowrap"
+                >
+                  FROM QUOTE
+                </button>
+              </>
+            )}
           </div>
         </div>
         <div className="col-span-2">
@@ -905,15 +933,15 @@ export default function BillingPage() {
         <div className="col-span-1 flex flex-col items-end justify-end text-[10px] font-bold pb-0.5">
           {billType === "GST" ? (
             <>
-              <div>
+              <div className="text-slate-500 font-bold tracking-wide">
                 CGST:{" "}
-                <span className="text-blue-700">
+                <span className="text-[var(--accent)] text-xs ml-1">
                   ₹{(totalGst / 2).toFixed(0)}
                 </span>
               </div>
-              <div>
+              <div className="text-slate-500 font-bold tracking-wide">
                 SGST:{" "}
-                <span className="text-blue-700">
+                <span className="text-[var(--accent)] text-xs ml-1">
                   ₹{(totalGst / 2).toFixed(0)}
                 </span>
               </div>
@@ -1015,7 +1043,7 @@ export default function BillingPage() {
                     <button
                       onClick={() => removeItem(item.id)}
                       className="text-red-500 hover:text-red-700 p-1"
-                      title="Remove Row"
+                      title={idx === 0 ? "Clear Row" : "Remove Row"}
                     >
                       <Trash2 size={14} />
                     </button>

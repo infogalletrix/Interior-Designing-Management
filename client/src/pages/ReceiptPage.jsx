@@ -1,13 +1,15 @@
 import React, { useState, useRef, useEffect } from "react";
 import { useReactToPrint } from "react-to-print";
-import { useLocation } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { Receipt, Printer, History, User, Calendar, IndianRupee, Trash2, Save, ArrowLeft, Building, X, CheckCircle2, Search, MapPin, Pencil } from "lucide-react";
 import { useDialog } from "../contexts/DialogContext";
 import SearchableSelect from "../components/SearchableSelect";
+import NotificationWidget from "../components/NotificationWidget";
 
 export default function ReceiptPage() {
   const { showDialog } = useDialog();
   const location = useLocation();
+  const navigate = useNavigate();
   const [showHistory, setShowHistory] = useState(false);
   const [historyFilter, setHistoryFilter] = useState("All");
   const [sites, setSites] = useState([]);
@@ -121,7 +123,7 @@ export default function ReceiptPage() {
 
   const validateForm = () => {
     if (!formData.siteId) {
-      showDialog({ title: "Validation Error", message: "Work Order must be selected.", type: "error" });
+      showDialog({ title: "Validation Error", message: "WO must be selected.", type: "error" });
       return false;
     }
     if (!formData.clientName || !formData.totalAmount || !formData.description) {
@@ -205,12 +207,19 @@ export default function ReceiptPage() {
           setPrintData([storedReceipt]);
           setTimeout(() => {
             handlePrintAction();
+            if (location.state?.returnToSites) {
+              setTimeout(() => navigate("/sites"), 500);
+            }
           }, 100);
         } else {
           showDialog({ title: isEditing ? "Updated" : "Generated", message: isEditing ? "Receipt updated successfully." : "Receipt generated successfully.", type: "success" });
+          if (location.state?.returnToSites) {
+            navigate("/sites");
+          } else {
+            resetForm();
+            setShowHistory(true);
+          }
         }
-        resetForm();
-        setShowHistory(true);
       }
     } catch(err) {
       console.error(err);
@@ -331,7 +340,7 @@ export default function ReceiptPage() {
           </div>
         </div>
         <div className="text-right mt-6">
-          <h2 className="text-xl font-black text-gray-900"># {data.receiptNo}</h2>
+          <h2 className="text-xl font-black text-gray-900">Receipt No: {data.receiptNo}</h2>
           <p className="font-bold mt-1 text-sm text-gray-700">Date: {new Date(data.date).toLocaleDateString('en-IN')}</p>
         </div>
       </div>
@@ -369,14 +378,15 @@ export default function ReceiptPage() {
 
   return (
     <div className="p-4 md:p-6 page-wrapper h-full flex flex-col font-sans relative">
-      <div className="flex justify-between items-center mb-5 shrink-0">
+      <div className="flex justify-between items-center mb-5 shrink-0 relative z-50">
         <div>
           <h1 className="text-xl font-black text-themed flex items-center gap-2">
             <Receipt className="text-blue-500" size={18} />
             Payment Receipts
           </h1>
-          <p className="text-muted text-xs mt-0.5 font-medium">Manage payments per work order.</p>
+          <p className="text-muted text-xs mt-0.5 font-medium">Manage payments per WO.</p>
         </div>
+        <NotificationWidget />
       </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-12 gap-8 flex-1 overflow-hidden">
@@ -385,13 +395,16 @@ export default function ReceiptPage() {
           <div className="p-5 border-b border-[var(--border-color)]">
             <div className="relative w-full shadow-sm rounded-xl">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted" size={16} />
-              <input type="text" placeholder="Search Work Orders..." className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-[var(--border-color)] themed-input text-sm outline-none transition-all" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
+              <input type="text" placeholder="Search WO..." className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-[var(--border-color)] themed-input text-sm outline-none transition-all" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
             </div>
           </div>
           <div className="flex-1 overflow-y-auto p-3 space-y-2 custom-scrollbar">
-             {sites.filter(s => s.name.toLowerCase().includes(searchTerm.toLowerCase()) || s.clientName.toLowerCase().includes(searchTerm.toLowerCase())).map(site => (
+             {sites.filter(s => {
+               if (location.state?.restrictToSiteId && String(s.id) !== String(location.state.restrictToSiteId)) return false;
+               return s.name.toLowerCase().includes(searchTerm.toLowerCase()) || s.clientName.toLowerCase().includes(searchTerm.toLowerCase());
+             }).map(site => (
                 <button key={site.id} onClick={() => setSelectedSiteId(site.id)} className={`w-full text-left p-4 rounded-2xl transition border ${selectedSiteId === site.id ? "bg-[var(--accent)]/10 border-[var(--accent)]/30 shadow-sm" : "themed-card border-[var(--border-color)]"}`}>
-                  <h3 className="font-black text-themed text-sm mb-1">#{site.id} - {site.name}</h3>
+                  <h3 className="font-black text-themed text-sm mb-1">WO: {site.id} - {site.name}</h3>
                   <div className="text-[10px] text-muted flex flex-col gap-1">
                     <span className="flex items-center gap-1"><User size={10}/> {site.clientName}</span>
                     <span className="flex items-center gap-1"><MapPin size={10}/> {site.address}</span>
@@ -558,7 +571,7 @@ export default function ReceiptPage() {
            ) : (
               <div className="h-full border-2 border-dashed border-[var(--border-color)] rounded-3xl flex flex-col items-center justify-center text-slate-400 bg-[var(--bg-surface)]">
                 <Building size={64} className="mb-4 text-slate-300" />
-                <p className="font-bold text-lg uppercase tracking-widest">Select a Work Order</p>
+                <p className="font-bold text-lg uppercase tracking-widest">Select a WO</p>
                 <p className="text-sm font-medium mt-2">Generate and view payment receipts per project.</p>
               </div>
            )}

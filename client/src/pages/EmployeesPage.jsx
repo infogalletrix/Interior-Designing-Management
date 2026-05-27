@@ -9,6 +9,7 @@ import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import * as XLSX from "xlsx";
 import { useDialog } from "../contexts/DialogContext";
+import NotificationWidget from "../components/NotificationWidget";
 
 const EmployeesPage = () => {
   const { showDialog } = useDialog();
@@ -412,7 +413,7 @@ const EmployeesPage = () => {
   return (
     <div className="p-4 md:p-6 page-wrapper">
       {/* HEADER */}
-      <div className="flex flex-col md:flex-row justify-between items-center mb-4 gap-3">
+      <div className="flex flex-col md:flex-row justify-between items-center mb-4 gap-3 relative z-50">
         <div>
           <h1 className="text-xl font-black text-themed tracking-tight flex items-center gap-2">
             <Users className="text-[#C9A227]" size={18} />
@@ -423,7 +424,7 @@ const EmployeesPage = () => {
           </p>
         </div>
         
-        <div className="flex gap-2">
+        <div className="flex gap-2 items-center">
           <button 
             onClick={exportPDF}
             className="flex items-center gap-1.5 bg-rose-50 text-rose-600 px-3 py-1.5 rounded-xl font-bold text-sm hover:bg-rose-100 transition-colors"
@@ -442,6 +443,7 @@ const EmployeesPage = () => {
           >
             <Plus size={18} /> Add Staff
           </button>
+          <NotificationWidget />
         </div>
       </div>
 

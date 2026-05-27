@@ -79,16 +79,16 @@ const PrintableInvoice = forwardRef(({ data, docType }, ref) => {
               <td className="p-2 border uppercase font-medium">{item.work}</td>
               <td className="p-2 border text-center text-gray-500">{item.unit}</td>
               <td className="p-2 border text-center">{item.area}</td>
-              <td className="p-2 border text-right">{parseFloat(item.price).toFixed(2)}</td>
-              <td className="p-2 border text-right">{item.taxableAmount.toFixed(2)}</td>
+              <td className="p-2 border text-right">{parseFloat(item.price || 0).toFixed(2)}</td>
+              <td className="p-2 border text-right">{(item.taxableAmount || 0).toFixed(2)}</td>
               {safeData.totalGst > 0 && (
                 <>
                   <td className="p-2 border text-center text-gray-900 font-bold">{item.gstPerc}%</td>
-                  <td className="p-2 border text-right font-medium">{item.gstAmount.toFixed(2)}</td>
+                  <td className="p-2 border text-right font-medium">{(item.gstAmount || 0).toFixed(2)}</td>
                 </>
               )}
               <td className="p-2 border text-right font-bold">
-                {item.amount.toFixed(2)}
+                {(item.amount || 0).toFixed(2)}
               </td>
             </tr>
           ))}

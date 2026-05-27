@@ -901,22 +901,18 @@ export default function BillingPage() {
               value={clientName}
               className="w-full themed-input border border-[var(--border-color)] px-2 py-1 text-sm outline-none focus:border-blue-400 cursor-not-allowed opacity-60"
             />
-            {!location.state?.restrictToSiteId && (
-              <>
-                <button
-                  onClick={() => setShowWorkOrderSearch(true)}
-                  className="btn-accent px-2 text-[10px] font-bold whitespace-nowrap"
-                >
-                  SELECT WO
-                </button>
-                <button
-                  onClick={() => setShowQuoteSearch(true)}
-                  className="bg-amber-600 text-white px-2 text-[10px] font-bold hover:bg-amber-700 whitespace-nowrap"
-                >
-                  FROM QUOTE
-                </button>
-              </>
-            )}
+            <button
+              onClick={() => setShowWorkOrderSearch(true)}
+              className="btn-accent px-2 text-[10px] font-bold whitespace-nowrap"
+            >
+              SELECT WO
+            </button>
+            <button
+              onClick={() => setShowQuoteSearch(true)}
+              className="bg-amber-600 text-white px-2 text-[10px] font-bold hover:bg-amber-700 whitespace-nowrap"
+            >
+              FROM QUOTE
+            </button>
           </div>
         </div>
         <div className="col-span-2">
